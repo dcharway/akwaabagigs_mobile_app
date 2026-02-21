@@ -1,0 +1,168 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import '../services/api_service.dart';
+
+class AppNotification {
+  final String type;
+  final String title;
+  final String message;
+  final DateTime timestamp;
+  final Map<String, dynamic>? data;
+  bool isRead;
+
+  AppNotification({
+    required this.type,
+    required this.title,
+    required this.message,
+    DateTime? timestamp,
+    this.data,
+    this.isRead = false,
+  }) : timestamp = timestamp ?? DateTime.now();
+}
+
+class NotificationsProvider extends ChangeNotifier {
+  WebSocketChannel? _channel;
+  final List<AppNotification> _notifications = [];
+  bool _isConnected = false;
+  Timer? _reconnectTimer;
+
+  List<AppNotification> get notifications => _notifications;
+  int get unreadCount =>
+      _notifications.where((n) => !n.isRead).length;
+  bool get isConnected => _isConnected;
+
+  void connect() {
+    if (_isConnected) return;
+
+    try {
+      final baseUrl = ApiService.baseUrl;
+      if (baseUrl.isEmpty) return;
+
+      final wsUrl = baseUrl
+          .replaceFirst('https://', 'wss://')
+          .replaceFirst('http://', 'ws://');
+
+      _channel = WebSocketChannel.connect(Uri.parse('$wsUrl/ws'));
+
+      _channel!.stream.listen(
+        (message) {
+          _handleMessage(message);
+        },
+        onDone: () {
+          _isConnected = false;
+          notifyListeners();
+          _scheduleReconnect();
+        },
+        onError: (error) {
+          _isConnected = false;
+          notifyListeners();
+          _scheduleReconnect();
+        },
+      );
+
+      _isConnected = true;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('WebSocket connection error: $e');
+      _scheduleReconnect();
+    }
+  }
+
+  void _handleMessage(dynamic message) {
+    try {
+      final data = json.decode(message as String);
+      final type = data['type'] as String? ?? 'notification';
+
+      AppNotification notification;
+
+      switch (type) {
+        case 'job_update':
+          notification = AppNotification(
+            type: type,
+            title: 'Gig Update',
+            message: data['message'] ?? 'A gig has been updated',
+            data: data,
+          );
+          break;
+        case 'new_application':
+          notification = AppNotification(
+            type: type,
+            title: 'New Application',
+            message: data['message'] ?? 'Someone applied to your gig',
+            data: data,
+          );
+          break;
+        case 'application_update':
+          notification = AppNotification(
+            type: type,
+            title: 'Application Update',
+            message:
+                data['message'] ?? 'Your application status has changed',
+            data: data,
+          );
+          break;
+        case 'new_rating':
+          notification = AppNotification(
+            type: type,
+            title: 'New Rating',
+            message: data['message'] ?? 'You received a new rating',
+            data: data,
+          );
+          break;
+        default:
+          notification = AppNotification(
+            type: type,
+            title: 'Notification',
+            message: data['message'] ?? 'New notification',
+            data: data,
+          );
+      }
+
+      _notifications.insert(0, notification);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error handling WebSocket message: $e');
+    }
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 5), () {
+      connect();
+    });
+  }
+
+  void markAllRead() {
+    for (final n in _notifications) {
+      n.isRead = true;
+    }
+    notifyListeners();
+  }
+
+  void markRead(int index) {
+    if (index >= 0 && index < _notifications.length) {
+      _notifications[index].isRead = true;
+      notifyListeners();
+    }
+  }
+
+  void clearAll() {
+    _notifications.clear();
+    notifyListeners();
+  }
+
+  void disconnect() {
+    _reconnectTimer?.cancel();
+    _channel?.sink.close();
+    _isConnected = false;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    disconnect();
+    super.dispose();
+  }
+}

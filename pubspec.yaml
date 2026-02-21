@@ -1,0 +1,29 @@
+name: akwaaba_gigs
+description: "Akwaaba Gigs - Connecting real people to real gigs in Ghana"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.2.1
+  http_parser: ^4.0.2
+  provider: ^6.1.2
+  shared_preferences: ^2.2.3
+  intl: ^0.19.0
+  url_launcher: ^6.2.6
+  cached_network_image: ^3.3.1
+  web_socket_channel: ^2.4.5
+  image_picker: ^1.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
