@@ -12,38 +12,8 @@ import '../models/application.dart';
 import '../models/rating.dart';
 
 class ApiService {
-  static String? _baseUrl;
+  static const String baseUrl = 'https://akwaabagigs.replit.app';
   static String? _authToken;
-
-  static String get baseUrl {
-    if (_baseUrl == null) {
-      const envUrl = String.fromEnvironment('API_URL', defaultValue: '');
-      _baseUrl = envUrl.isNotEmpty ? envUrl : '';
-    }
-    return _baseUrl!;
-  }
-
-  static bool get isBaseUrlConfigured => baseUrl.isNotEmpty;
-
-  static void setBaseUrl(String url) {
-    // Remove trailing slash
-    _baseUrl = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
-  }
-
-  static Future<void> saveBaseUrl(String url) async {
-    setBaseUrl(url);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('api_base_url', _baseUrl!);
-  }
-
-  static Future<String?> loadBaseUrl() async {
-    final prefs = await SharedPreferences.getInstance();
-    final url = prefs.getString('api_base_url');
-    if (url != null && url.isNotEmpty) {
-      setBaseUrl(url);
-    }
-    return url;
-  }
 
   static void setAuthToken(String? token) {
     _authToken = token;

@@ -4,12 +4,8 @@ import 'providers/auth_provider.dart';
 import 'providers/jobs_provider.dart';
 import 'providers/notifications_provider.dart';
 import 'screens/home_screen.dart';
-import 'services/api_service.dart';
-
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // Load saved server URL before app starts
-  await ApiService.loadBaseUrl();
   runApp(const AkwaabaGigsApp());
 }
 
