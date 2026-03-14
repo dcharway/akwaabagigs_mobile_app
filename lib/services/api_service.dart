@@ -12,7 +12,7 @@ import '../models/application.dart';
 import '../models/rating.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://akwaabagigs.replit.app';
+  static const String baseUrl = 'https://talent-connect-secure.replit.app';
   static String? _authToken;
 
   static void setAuthToken(String? token) {
@@ -22,11 +22,25 @@ class ApiService {
   static Map<String, String> get _headers {
     final headers = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'User-Agent': 'AkwaabaGigs/1.0',
     };
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
     }
     return headers;
+  }
+
+  /// Safely decode JSON response body. Throws a user-friendly error if the
+  /// response is HTML (e.g. Cloudflare challenge page) instead of JSON.
+  static dynamic _decodeResponse(http.Response response) {
+    final body = response.body.trim();
+    if (body.startsWith('<') || body.startsWith('<!')) {
+      throw Exception(
+        'Server is temporarily unavailable. Please try again in a moment.',
+      );
+    }
+    return json.decode(body);
   }
 
   // ============ AUTH ============
@@ -38,21 +52,21 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/login'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: json.encode({
           'email': email,
           'password': password,
         }),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body);
+        final data = _decodeResponse(response);
         final token = data['token'] as String?;
         if (token != null) {
           await saveAuthToken(token);
         }
         return data;
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? error['message'] ?? 'Login failed');
     } catch (e) {
       if (e is Exception) rethrow;
@@ -69,7 +83,7 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/register'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: json.encode({
           'firstName': firstName,
           'lastName': lastName,
@@ -78,14 +92,14 @@ class ApiService {
         }),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body);
+        final data = _decodeResponse(response);
         final token = data['token'] as String?;
         if (token != null) {
           await saveAuthToken(token);
         }
         return data;
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? error['message'] ?? 'Registration failed');
     } catch (e) {
       if (e is Exception) rethrow;
@@ -100,7 +114,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = _decodeResponse(response);
         if (data['user'] != null) {
           return User.fromJson(data['user']);
         }
@@ -131,7 +145,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final List<dynamic> data = _decodeResponse(response);
         return data.map((json) => Job.fromJson(json)).toList();
       }
       throw Exception('Failed to load jobs: ${response.statusCode}');
@@ -147,7 +161,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        return Job.fromJson(json.decode(response.body));
+        return Job.fromJson(_decodeResponse(response));
       }
       if (response.statusCode == 404) return null;
       throw Exception('Failed to load job: ${response.statusCode}');
@@ -163,7 +177,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final List<dynamic> data = _decodeResponse(response);
         return data.map((json) => Job.fromJson(json)).toList();
       }
       throw Exception('Failed to load your jobs: ${response.statusCode}');
@@ -206,9 +220,9 @@ class ApiService {
         body: json.encode(body),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return Job.fromJson(json.decode(response.body));
+        return Job.fromJson(_decodeResponse(response));
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? 'Failed to create job');
     } catch (e) {
       throw Exception('Failed to create job: $e');
@@ -223,9 +237,9 @@ class ApiService {
         body: json.encode(updates),
       );
       if (response.statusCode == 200) {
-        return Job.fromJson(json.decode(response.body));
+        return Job.fromJson(_decodeResponse(response));
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? 'Failed to update job');
     } catch (e) {
       throw Exception('Failed to update job: $e');
@@ -239,7 +253,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode != 200 && response.statusCode != 204) {
-        final error = json.decode(response.body);
+        final error = _decodeResponse(response);
         throw Exception(error['error'] ?? 'Failed to delete job');
       }
     } catch (e) {
@@ -277,7 +291,7 @@ class ApiService {
         }),
       );
       if (response.statusCode != 200 && response.statusCode != 201) {
-        final error = json.decode(response.body);
+        final error = _decodeResponse(response);
         throw Exception(error['error'] ?? 'Failed to submit application');
       }
     } catch (e) {
@@ -299,7 +313,7 @@ class ApiService {
 
       final response = await http.get(uri, headers: _headers);
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final List<dynamic> data = _decodeResponse(response);
         return data.map((json) => Application.fromJson(json)).toList();
       }
       throw Exception('Failed to load applications: ${response.statusCode}');
@@ -315,7 +329,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        return Application.fromJson(json.decode(response.body));
+        return Application.fromJson(_decodeResponse(response));
       }
       return null;
     } catch (e) {
@@ -332,7 +346,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final List<dynamic> data = _decodeResponse(response);
         return data.map((json) => Conversation.fromJson(json)).toList();
       }
       throw Exception('Failed to load conversations: ${response.statusCode}');
@@ -361,9 +375,9 @@ class ApiService {
         }),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return Conversation.fromJson(json.decode(response.body));
+        return Conversation.fromJson(_decodeResponse(response));
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? 'Failed to create conversation');
     } catch (e) {
       throw Exception('Failed to create conversation: $e');
@@ -377,7 +391,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final List<dynamic> data = _decodeResponse(response);
         return data.map((json) => Message.fromJson(json)).toList();
       }
       throw Exception('Failed to load messages: ${response.statusCode}');
@@ -397,7 +411,7 @@ class ApiService {
         body: json.encode({'content': content}),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return Message.fromJson(json.decode(response.body));
+        return Message.fromJson(_decodeResponse(response));
       }
       throw Exception('Failed to send message: ${response.statusCode}');
     } catch (e) {
@@ -428,7 +442,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        return GigSeeker.fromJson(json.decode(response.body));
+        return GigSeeker.fromJson(_decodeResponse(response));
       }
       return null;
     } catch (e) {
@@ -443,7 +457,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        return GigSeeker.fromJson(json.decode(response.body));
+        return GigSeeker.fromJson(_decodeResponse(response));
       }
       return null;
     } catch (e) {
@@ -469,9 +483,9 @@ class ApiService {
         }),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return GigSeeker.fromJson(json.decode(response.body));
+        return GigSeeker.fromJson(_decodeResponse(response));
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? 'Failed to register');
     } catch (e) {
       throw Exception('Failed to register: $e');
@@ -487,9 +501,9 @@ class ApiService {
         body: json.encode(updates),
       );
       if (response.statusCode == 200) {
-        return GigSeeker.fromJson(json.decode(response.body));
+        return GigSeeker.fromJson(_decodeResponse(response));
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? 'Failed to update profile');
     } catch (e) {
       throw Exception('Failed to update profile: $e');
@@ -505,7 +519,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        return GigPoster.fromJson(json.decode(response.body));
+        return GigPoster.fromJson(_decodeResponse(response));
       }
       return null;
     } catch (e) {
@@ -536,9 +550,9 @@ class ApiService {
         }),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return GigPoster.fromJson(json.decode(response.body));
+        return GigPoster.fromJson(_decodeResponse(response));
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? 'Failed to create profile');
     } catch (e) {
       throw Exception('Failed to create profile: $e');
@@ -554,9 +568,9 @@ class ApiService {
         body: json.encode(updates),
       );
       if (response.statusCode == 200) {
-        return GigPoster.fromJson(json.decode(response.body));
+        return GigPoster.fromJson(_decodeResponse(response));
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? 'Failed to update profile');
     } catch (e) {
       throw Exception('Failed to update profile: $e');
@@ -577,7 +591,7 @@ class ApiService {
         }),
       );
       if (response.statusCode != 200 && response.statusCode != 201) {
-        final error = json.decode(response.body);
+        final error = _decodeResponse(response);
         throw Exception(
             error['error'] ?? 'Failed to submit verification');
       }
@@ -619,10 +633,10 @@ class ApiService {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body);
+        final data = _decodeResponse(response);
         return data['url'] ?? data['fileUrl'] ?? '';
       }
-      final error = json.decode(response.body);
+      final error = _decodeResponse(response);
       throw Exception(error['error'] ?? 'Upload failed');
     } catch (e) {
       throw Exception('Failed to upload file: $e');
@@ -661,7 +675,7 @@ class ApiService {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body);
+        final data = _decodeResponse(response);
         return List<String>.from(data['urls'] ?? []);
       }
       throw Exception('Failed to upload images');
@@ -736,7 +750,7 @@ class ApiService {
         }),
       );
       if (response.statusCode != 200 && response.statusCode != 201) {
-        final error = json.decode(response.body);
+        final error = _decodeResponse(response);
         throw Exception(error['error'] ?? 'Failed to submit rating');
       }
     } catch (e) {
@@ -751,7 +765,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        return SeekerRatingSummary.fromJson(json.decode(response.body));
+        return SeekerRatingSummary.fromJson(_decodeResponse(response));
       }
       return null;
     } catch (e) {
@@ -767,7 +781,7 @@ class ApiService {
         headers: _headers,
       );
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = _decodeResponse(response);
         return data['exists'] == true;
       }
       return false;
