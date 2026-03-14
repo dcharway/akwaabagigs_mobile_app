@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/api_service.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -15,47 +14,22 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _serverUrlController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _showServerConfig = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _serverUrlController.text = ApiService.baseUrl;
-  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _serverUrlController.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Ensure server URL is set
-    final serverUrl = _serverUrlController.text.trim();
-    if (serverUrl.isEmpty) {
-      setState(() => _showServerConfig = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please configure the server URL first'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
     setState(() => _isLoading = true);
 
     try {
-      // Save server URL if changed
-      await ApiService.saveBaseUrl(serverUrl);
-
       await context.read<AuthProvider>().login(
             email: _emailController.text.trim(),
             password: _passwordController.text,
@@ -87,15 +61,6 @@ class _LoginScreenState extends State<LoginScreen> {
         title: const Text('Sign In'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              setState(() => _showServerConfig = !_showServerConfig);
-            },
-            tooltip: 'Server Settings',
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -127,31 +92,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
-
-              // Server URL config (collapsible)
-              if (_showServerConfig || !ApiService.isBaseUrlConfigured) ...[
-                TextFormField(
-                  controller: _serverUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Server URL',
-                    hintText: 'https://your-server.com',
-                    prefixIcon: Icon(Icons.dns_outlined),
-                  ),
-                  keyboardType: TextInputType.url,
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Server URL is required';
-                    }
-                    final url = v.trim();
-                    if (!url.startsWith('http://') &&
-                        !url.startsWith('https://')) {
-                      return 'URL must start with http:// or https://';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-              ],
 
               TextFormField(
                 controller: _emailController,
@@ -234,9 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       final registered = await Navigator.push<bool>(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => RegisterScreen(
-                            serverUrl: _serverUrlController.text.trim(),
-                          ),
+                          builder: (_) => const RegisterScreen(),
                         ),
                       );
                       if (registered == true && mounted) {

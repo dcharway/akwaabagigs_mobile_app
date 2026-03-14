@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/api_service.dart';
 
 class RegisterScreen extends StatefulWidget {
-  final String? serverUrl;
-
-  const RegisterScreen({super.key, this.serverUrl});
+  const RegisterScreen({super.key});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -35,23 +32,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
-
-    // Ensure server URL is configured
-    if (widget.serverUrl != null && widget.serverUrl!.isNotEmpty) {
-      await ApiService.saveBaseUrl(widget.serverUrl!);
-    }
-
-    if (!ApiService.isBaseUrlConfigured) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Server URL not configured. Go back and set it.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
 
     setState(() => _isLoading = true);
 
