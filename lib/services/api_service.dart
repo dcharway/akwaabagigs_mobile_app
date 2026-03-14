@@ -23,8 +23,26 @@ class ApiService {
     return _baseUrl!;
   }
 
+  static bool get isBaseUrlConfigured => baseUrl.isNotEmpty;
+
   static void setBaseUrl(String url) {
-    _baseUrl = url;
+    // Remove trailing slash
+    _baseUrl = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+  }
+
+  static Future<void> saveBaseUrl(String url) async {
+    setBaseUrl(url);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('api_base_url', _baseUrl!);
+  }
+
+  static Future<String?> loadBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final url = prefs.getString('api_base_url');
+    if (url != null && url.isNotEmpty) {
+      setBaseUrl(url);
+    }
+    return url;
   }
 
   static void setAuthToken(String? token) {
@@ -42,6 +60,68 @@ class ApiService {
   }
 
   // ============ AUTH ============
+
+  static Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'email': email,
+          'password': password,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+        final token = data['token'] as String?;
+        if (token != null) {
+          await saveAuthToken(token);
+        }
+        return data;
+      }
+      final error = json.decode(response.body);
+      throw Exception(error['error'] ?? error['message'] ?? 'Login failed');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Failed to connect to server: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> register({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'firstName': firstName,
+          'lastName': lastName,
+          'email': email,
+          'password': password,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+        final token = data['token'] as String?;
+        if (token != null) {
+          await saveAuthToken(token);
+        }
+        return data;
+      }
+      final error = json.decode(response.body);
+      throw Exception(error['error'] ?? error['message'] ?? 'Registration failed');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Failed to connect to server: $e');
+    }
+  }
 
   static Future<User?> getCurrentUser() async {
     try {

@@ -1,0 +1,256 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
+import 'register_screen.dart';
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _serverUrlController = TextEditingController();
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+  bool _showServerConfig = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _serverUrlController.text = ApiService.baseUrl;
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _serverUrlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    // Ensure server URL is set
+    final serverUrl = _serverUrlController.text.trim();
+    if (serverUrl.isEmpty) {
+      setState(() => _showServerConfig = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please configure the server URL first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Save server URL if changed
+      await ApiService.saveBaseUrl(serverUrl);
+
+      await context.read<AuthProvider>().login(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Sign In'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              setState(() => _showServerConfig = !_showServerConfig);
+            },
+            tooltip: 'Server Settings',
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 24),
+              Icon(
+                Icons.work,
+                size: 64,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Welcome Back',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Sign in to your Akwaaba Gigs account',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+
+              // Server URL config (collapsible)
+              if (_showServerConfig || !ApiService.isBaseUrlConfigured) ...[
+                TextFormField(
+                  controller: _serverUrlController,
+                  decoration: const InputDecoration(
+                    labelText: 'Server URL',
+                    hintText: 'https://your-server.com',
+                    prefixIcon: Icon(Icons.dns_outlined),
+                  ),
+                  keyboardType: TextInputType.url,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Server URL is required';
+                    }
+                    final url = v.trim();
+                    if (!url.startsWith('http://') &&
+                        !url.startsWith('https://')) {
+                      return 'URL must start with http:// or https://';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Email is required';
+                  }
+                  if (!v.contains('@')) {
+                    return 'Enter a valid email';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _passwordController,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_outlined),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
+                  ),
+                ),
+                obscureText: _obscurePassword,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _login(),
+                validator: (v) {
+                  if (v == null || v.isEmpty) {
+                    return 'Password is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+
+              FilledButton(
+                onPressed: _isLoading ? null : _login,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Sign In',
+                        style: TextStyle(fontSize: 16),
+                      ),
+              ),
+              const SizedBox(height: 16),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Don't have an account? ",
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final registered = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RegisterScreen(
+                            serverUrl: _serverUrlController.text.trim(),
+                          ),
+                        ),
+                      );
+                      if (registered == true && mounted) {
+                        Navigator.pop(context, true);
+                      }
+                    },
+                    child: const Text('Sign Up'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

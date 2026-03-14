@@ -13,6 +13,7 @@ import 'post_gig_screen.dart';
 import 'my_gigs_screen.dart';
 import 'my_applications_screen.dart';
 import 'saved_gigs_screen.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -120,9 +121,18 @@ class _HomeScreenState extends State<HomeScreen> {
           const ProfileScreen(),
         ],
       ),
-      floatingActionButton: authProvider.isAuthenticated && _currentIndex == 0
+      floatingActionButton: _currentIndex == 0
           ? FloatingActionButton.extended(
               onPressed: () async {
+                if (!authProvider.isAuthenticated) {
+                  final loggedIn = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const LoginScreen()),
+                  );
+                  if (loggedIn != true) return;
+                }
+                if (!context.mounted) return;
                 final posted = await Navigator.push<bool>(
                   context,
                   MaterialPageRoute(

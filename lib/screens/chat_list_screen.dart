@@ -5,6 +5,7 @@ import '../models/conversation.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import 'chat_screen.dart';
+import 'login_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -66,6 +67,20 @@ class _ChatListScreenState extends State<ChatListScreen> {
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.outline,
               ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () async {
+                final loggedIn = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+                if (loggedIn == true) {
+                  _loadConversations();
+                }
+              },
+              icon: const Icon(Icons.login),
+              label: const Text('Sign In'),
             ),
           ],
         ),

@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import 'chat_screen.dart';
 import 'apply_screen.dart';
+import 'login_screen.dart';
 
 class JobDetailsScreen extends StatefulWidget {
   final Job job;
@@ -281,12 +282,11 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     final authProvider = context.read<AuthProvider>();
 
     if (!authProvider.isAuthenticated) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please sign in to chat with the poster'),
-        ),
+      final loggedIn = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
-      return;
+      if (loggedIn != true || !context.mounted) return;
     }
 
     try {
@@ -321,7 +321,18 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     }
   }
 
-  void _applyForJob(BuildContext context) {
+  void _applyForJob(BuildContext context) async {
+    final authProvider = context.read<AuthProvider>();
+
+    if (!authProvider.isAuthenticated) {
+      final loggedIn = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+      if (loggedIn != true || !context.mounted) return;
+    }
+
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(

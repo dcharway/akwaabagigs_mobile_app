@@ -36,6 +36,56 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> login({
+    required String email,
+    required String password,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final data = await ApiService.login(email: email, password: password);
+      if (data['user'] != null) {
+        _user = User.fromJson(data['user']);
+        _isAuthenticated = true;
+      } else {
+        // Token was saved, now fetch user
+        await checkAuth();
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> register({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final data = await ApiService.register(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        password: password,
+      );
+      if (data['user'] != null) {
+        _user = User.fromJson(data['user']);
+        _isAuthenticated = true;
+      } else {
+        await checkAuth();
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> logout() async {
     await ApiService.clearAuthToken();
     _user = null;
