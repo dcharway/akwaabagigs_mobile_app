@@ -12,7 +12,7 @@ import '../models/application.dart';
 import '../models/rating.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://akwaabagigs.replit.app';
+  static const String baseUrl = 'https://talent-connect-secure.replit.app';
   static String? _authToken;
 
   static void setAuthToken(String? token) {
