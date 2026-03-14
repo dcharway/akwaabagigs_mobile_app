@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../providers/auth_provider.dart';
 import '../models/gig_seeker.dart';
 import '../models/gig_poster.dart';
@@ -9,6 +8,7 @@ import 'edit_seeker_profile_screen.dart';
 import 'edit_poster_profile_screen.dart';
 import 'verification_screen.dart';
 import 'seeker_ratings_screen.dart';
+import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -151,9 +151,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () => _launchSignIn(context),
+              onPressed: () => _navigateToLogin(context),
               icon: const Icon(Icons.login),
-              label: const Text('Sign in with Replit'),
+              label: const Text('Sign In'),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
@@ -623,12 +623,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _launchSignIn(BuildContext context) async {
-    final baseUrl = ApiService.baseUrl;
-    final loginUrl = Uri.parse('$baseUrl/api/login');
-
-    if (await canLaunchUrl(loginUrl)) {
-      await launchUrl(loginUrl, mode: LaunchMode.externalApplication);
+  Future<void> _navigateToLogin(BuildContext context) async {
+    final loggedIn = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+    if (loggedIn == true && mounted) {
+      _loadProfiles();
     }
   }
 
