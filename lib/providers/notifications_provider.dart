@@ -27,6 +27,8 @@ class NotificationsProvider extends ChangeNotifier {
   final List<AppNotification> _notifications = [];
   bool _isConnected = false;
   Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 3;
 
   List<AppNotification> get notifications => _notifications;
   int get unreadCount =>
@@ -36,15 +38,37 @@ class NotificationsProvider extends ChangeNotifier {
   void connect() {
     if (_isConnected) return;
 
+    // Stop retrying after max attempts — the server likely doesn't support WebSocket
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      debugPrint('WebSocket: max reconnect attempts reached, giving up');
+      return;
+    }
+
     try {
       final baseUrl = ApiService.baseUrl;
       if (baseUrl.isEmpty) return;
 
-      final wsUrl = baseUrl
-          .replaceFirst('https://', 'wss://')
-          .replaceFirst('http://', 'ws://');
+      final uri = Uri.parse(baseUrl);
+      final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
+      final wsUri = Uri(
+        scheme: wsScheme,
+        host: uri.host,
+        port: uri.hasPort ? uri.port : null,
+        path: '/ws',
+      );
 
-      _channel = WebSocketChannel.connect(Uri.parse('$wsUrl/ws'));
+      _channel = WebSocketChannel.connect(wsUri);
+
+      _channel!.ready.then((_) {
+        _isConnected = true;
+        _reconnectAttempts = 0;
+        notifyListeners();
+      }).catchError((error) {
+        debugPrint('WebSocket handshake failed: $error');
+        _isConnected = false;
+        notifyListeners();
+        _scheduleReconnect();
+      });
 
       _channel!.stream.listen(
         (message) {
@@ -56,14 +80,12 @@ class NotificationsProvider extends ChangeNotifier {
           _scheduleReconnect();
         },
         onError: (error) {
+          debugPrint('WebSocket stream error: $error');
           _isConnected = false;
           notifyListeners();
           _scheduleReconnect();
         },
       );
-
-      _isConnected = true;
-      notifyListeners();
     } catch (e) {
       debugPrint('WebSocket connection error: $e');
       _scheduleReconnect();
@@ -129,7 +151,14 @@ class NotificationsProvider extends ChangeNotifier {
 
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 5), () {
+    _reconnectAttempts++;
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      debugPrint('WebSocket: max reconnect attempts reached, stopping');
+      return;
+    }
+    // Exponential backoff: 5s, 10s, 20s
+    final delay = Duration(seconds: 5 * (1 << _reconnectAttempts));
+    _reconnectTimer = Timer(delay, () {
       connect();
     });
   }
