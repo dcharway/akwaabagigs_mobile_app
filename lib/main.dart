@@ -5,8 +5,14 @@ import 'providers/auth_provider.dart';
 import 'providers/jobs_provider.dart';
 import 'providers/notifications_provider.dart';
 import 'screens/home_screen.dart';
-void main() {
+import 'services/back4app_service.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Back4App Parse SDK
+  await Back4AppService.initialize();
+
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     debugPrint('Flutter error: ${details.exception}');

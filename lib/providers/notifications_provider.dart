@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../services/api_service.dart';
+import '../services/back4app_service.dart';
 
 class AppNotification {
   final String type;

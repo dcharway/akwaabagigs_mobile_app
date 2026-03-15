@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/user.dart';
-import '../services/api_service.dart';
+import '../services/back4app_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _user;
@@ -16,7 +16,6 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    await ApiService.loadAuthToken();
     await checkAuth();
   }
 
@@ -25,7 +24,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _user = await ApiService.getCurrentUser();
+      _user = await Back4AppService.getCurrentUser();
       _isAuthenticated = _user != null;
     } catch (e) {
       _user = null;
@@ -44,12 +43,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final data = await ApiService.login(email: email, password: password);
+      final data = await Back4AppService.login(email: email, password: password);
       if (data['user'] != null) {
         _user = User.fromJson(data['user']);
         _isAuthenticated = true;
       } else {
-        // Token was saved, now fetch user
         await checkAuth();
       }
     } finally {
@@ -68,7 +66,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final data = await ApiService.register(
+      final data = await Back4AppService.register(
         firstName: firstName,
         lastName: lastName,
         email: email,
@@ -87,7 +85,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await ApiService.clearAuthToken();
+    await Back4AppService.logout();
     _user = null;
     _isAuthenticated = false;
     notifyListeners();

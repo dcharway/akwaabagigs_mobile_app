@@ -1,0 +1,10 @@
+{
+  "name": "akwaabagigs-backend",
+  "version": "1.0.0",
+  "description": "Akwaaba Gigs Back4App Cloud Code",
+  "main": "cloud/main.js",
+  "scripts": {
+    "start": "echo 'Deploy via Back4App Dashboard > Cloud Code Functions'"
+  },
+  "dependencies": {}
+}

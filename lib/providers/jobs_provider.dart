@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/job.dart';
-import '../services/api_service.dart';
+import '../services/back4app_service.dart';
 
 class JobsProvider extends ChangeNotifier {
   List<Job> _jobs = [];
@@ -87,7 +87,7 @@ class JobsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _jobs = await ApiService.getJobs();
+      _jobs = await Back4AppService.getJobs();
     } catch (e) {
       _error = e.toString();
     }
