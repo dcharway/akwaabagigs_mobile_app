@@ -26,6 +26,7 @@ class NotificationsProvider extends ChangeNotifier {
   WebSocketChannel? _channel;
   final List<AppNotification> _notifications = [];
   bool _isConnected = false;
+  bool _isConnecting = false;
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
   static const int _maxReconnectAttempts = 3;
@@ -35,8 +36,8 @@ class NotificationsProvider extends ChangeNotifier {
       _notifications.where((n) => !n.isRead).length;
   bool get isConnected => _isConnected;
 
-  void connect() {
-    if (_isConnected) return;
+  Future<void> connect() async {
+    if (_isConnected || _isConnecting) return;
 
     // Stop retrying after max attempts — the server likely doesn't support WebSocket
     if (_reconnectAttempts >= _maxReconnectAttempts) {
@@ -44,9 +45,14 @@ class NotificationsProvider extends ChangeNotifier {
       return;
     }
 
+    _isConnecting = true;
+
     try {
       final baseUrl = ApiService.baseUrl;
-      if (baseUrl.isEmpty) return;
+      if (baseUrl.isEmpty) {
+        _isConnecting = false;
+        return;
+      }
 
       final uri = Uri.parse(baseUrl);
       final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
@@ -59,16 +65,13 @@ class NotificationsProvider extends ChangeNotifier {
 
       _channel = WebSocketChannel.connect(wsUri);
 
-      _channel!.ready.then((_) {
-        _isConnected = true;
-        _reconnectAttempts = 0;
-        notifyListeners();
-      }).catchError((error) {
-        debugPrint('WebSocket handshake failed: $error');
-        _isConnected = false;
-        notifyListeners();
-        _scheduleReconnect();
-      });
+      // Wait for the handshake to complete before listening
+      await _channel!.ready;
+
+      _isConnected = true;
+      _isConnecting = false;
+      _reconnectAttempts = 0;
+      notifyListeners();
 
       _channel!.stream.listen(
         (message) {
@@ -83,11 +86,14 @@ class NotificationsProvider extends ChangeNotifier {
           debugPrint('WebSocket stream error: $error');
           _isConnected = false;
           notifyListeners();
-          _scheduleReconnect();
         },
       );
     } catch (e) {
-      debugPrint('WebSocket connection error: $e');
+      debugPrint('WebSocket connection failed: $e');
+      _isConnected = false;
+      _isConnecting = false;
+      _channel = null;
+      notifyListeners();
       _scheduleReconnect();
     }
   }
