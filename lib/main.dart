@@ -1,5 +1,4 @@
-import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
@@ -7,17 +6,17 @@ import 'providers/jobs_provider.dart';
 import 'providers/notifications_provider.dart';
 import 'screens/home_screen.dart';
 void main() {
-  runZonedGuarded(() {
-    WidgetsFlutterBinding.ensureInitialized();
-    FlutterError.onError = (details) {
-      FlutterError.presentError(details);
-      debugPrint('Flutter error: ${details.exception}');
-    };
-    runApp(const AkwaabaGigsApp());
-  }, (error, stack) {
-    debugPrint('Unhandled error: $error');
+  WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('Flutter error: ${details.exception}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Unhandled platform error: $error');
     debugPrint('$stack');
-  });
+    return true;
+  };
+  runApp(const AkwaabaGigsApp());
 }
 
 class AkwaabaGigsApp extends StatelessWidget {
