@@ -1,8 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
-import '../services/api_service.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
+import '../config/back4app_config.dart';
 
 class AppNotification {
   final String type;
@@ -23,13 +22,13 @@ class AppNotification {
 }
 
 class NotificationsProvider extends ChangeNotifier {
-  WebSocketChannel? _channel;
   final List<AppNotification> _notifications = [];
   bool _isConnected = false;
   bool _isConnecting = false;
-  Timer? _reconnectTimer;
-  int _reconnectAttempts = 0;
-  static const int _maxReconnectAttempts = 3;
+  LiveQuery? _liveQuery;
+  Subscription? _jobSubscription;
+  Subscription? _applicationSubscription;
+  Subscription? _ratingSubscription;
 
   List<AppNotification> get notifications => _notifications;
   int get unreadCount =>
@@ -38,135 +37,87 @@ class NotificationsProvider extends ChangeNotifier {
 
   Future<void> connect() async {
     if (_isConnected || _isConnecting) return;
-
-    // Stop retrying after max attempts — the server likely doesn't support WebSocket
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
-      debugPrint('WebSocket: max reconnect attempts reached, giving up');
-      return;
-    }
-
     _isConnecting = true;
 
     try {
-      final baseUrl = ApiService.baseUrl;
-      if (baseUrl.isEmpty) {
-        _isConnecting = false;
-        return;
-      }
+      _liveQuery = LiveQuery();
 
-      final uri = Uri.parse(baseUrl);
-      final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
-      final wsUri = Uri(
-        scheme: wsScheme,
-        host: uri.host,
-        port: uri.hasPort ? uri.port : null,
-        path: '/ws',
-      );
+      // Subscribe to Job updates
+      final jobQuery = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.jobClass));
+      _jobSubscription = await _liveQuery!.client.subscribe(jobQuery);
 
-      _channel = WebSocketChannel.connect(wsUri);
+      _jobSubscription!.on(LiveQueryEvent.create, (value) {
+        _addNotification(
+          type: 'job_update',
+          title: 'New Gig Posted',
+          message: '${value.get<String>('title') ?? 'A new gig'} has been posted',
+        );
+      });
 
-      // Wait for the handshake to complete before listening
-      await _channel!.ready;
+      _jobSubscription!.on(LiveQueryEvent.update, (value) {
+        _addNotification(
+          type: 'job_update',
+          title: 'Gig Update',
+          message: '${value.get<String>('title') ?? 'A gig'} has been updated',
+        );
+      });
+
+      // Subscribe to Application updates
+      final appQuery = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.applicationClass));
+      _applicationSubscription = await _liveQuery!.client.subscribe(appQuery);
+
+      _applicationSubscription!.on(LiveQueryEvent.create, (value) {
+        _addNotification(
+          type: 'new_application',
+          title: 'New Application',
+          message: '${value.get<String>('fullName') ?? 'Someone'} applied to your gig',
+        );
+      });
+
+      _applicationSubscription!.on(LiveQueryEvent.update, (value) {
+        _addNotification(
+          type: 'application_update',
+          title: 'Application Update',
+          message: 'An application status has changed to ${value.get<String>('status') ?? 'updated'}',
+        );
+      });
+
+      // Subscribe to Rating updates
+      final ratingQuery = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.ratingClass));
+      _ratingSubscription = await _liveQuery!.client.subscribe(ratingQuery);
+
+      _ratingSubscription!.on(LiveQueryEvent.create, (value) {
+        _addNotification(
+          type: 'new_rating',
+          title: 'New Rating',
+          message: 'You received a new rating of ${value.get<int>('rating') ?? 0}/5',
+        );
+      });
 
       _isConnected = true;
       _isConnecting = false;
-      _reconnectAttempts = 0;
       notifyListeners();
-
-      _channel!.stream.listen(
-        (message) {
-          _handleMessage(message);
-        },
-        onDone: () {
-          _isConnected = false;
-          notifyListeners();
-          _scheduleReconnect();
-        },
-        onError: (error) {
-          debugPrint('WebSocket stream error: $error');
-          _isConnected = false;
-          notifyListeners();
-        },
-      );
     } catch (e) {
-      debugPrint('WebSocket connection failed: $e');
+      debugPrint('LiveQuery connection failed: $e');
       _isConnected = false;
       _isConnecting = false;
-      _channel = null;
       notifyListeners();
-      _scheduleReconnect();
     }
   }
 
-  void _handleMessage(dynamic message) {
-    try {
-      final data = json.decode(message as String);
-      final type = data['type'] as String? ?? 'notification';
-
-      AppNotification notification;
-
-      switch (type) {
-        case 'job_update':
-          notification = AppNotification(
-            type: type,
-            title: 'Gig Update',
-            message: data['message'] ?? 'A gig has been updated',
-            data: data,
-          );
-          break;
-        case 'new_application':
-          notification = AppNotification(
-            type: type,
-            title: 'New Application',
-            message: data['message'] ?? 'Someone applied to your gig',
-            data: data,
-          );
-          break;
-        case 'application_update':
-          notification = AppNotification(
-            type: type,
-            title: 'Application Update',
-            message:
-                data['message'] ?? 'Your application status has changed',
-            data: data,
-          );
-          break;
-        case 'new_rating':
-          notification = AppNotification(
-            type: type,
-            title: 'New Rating',
-            message: data['message'] ?? 'You received a new rating',
-            data: data,
-          );
-          break;
-        default:
-          notification = AppNotification(
-            type: type,
-            title: 'Notification',
-            message: data['message'] ?? 'New notification',
-            data: data,
-          );
-      }
-
-      _notifications.insert(0, notification);
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error handling WebSocket message: $e');
-    }
-  }
-
-  void _scheduleReconnect() {
-    _reconnectTimer?.cancel();
-    _reconnectAttempts++;
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
-      debugPrint('WebSocket: max reconnect attempts reached, stopping');
-      return;
-    }
-    // Exponential backoff: 5s, 10s, 20s
-    final delay = Duration(seconds: 5 * (1 << _reconnectAttempts));
-    _reconnectTimer = Timer(delay, () {
-      connect();
-    });
+  void _addNotification({
+    required String type,
+    required String title,
+    required String message,
+  }) {
+    _notifications.insert(
+      0,
+      AppNotification(type: type, title: title, message: message),
+    );
+    notifyListeners();
   }
 
   void markAllRead() {
@@ -189,8 +140,17 @@ class NotificationsProvider extends ChangeNotifier {
   }
 
   void disconnect() {
-    _reconnectTimer?.cancel();
-    _channel?.sink.close();
+    if (_liveQuery != null) {
+      if (_jobSubscription != null) {
+        _liveQuery!.client.unSubscribe(_jobSubscription!);
+      }
+      if (_applicationSubscription != null) {
+        _liveQuery!.client.unSubscribe(_applicationSubscription!);
+      }
+      if (_ratingSubscription != null) {
+        _liveQuery!.client.unSubscribe(_ratingSubscription!);
+      }
+    }
     _isConnected = false;
     notifyListeners();
   }

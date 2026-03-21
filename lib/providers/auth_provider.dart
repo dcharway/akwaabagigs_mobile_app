@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
 
@@ -16,7 +17,6 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    await ApiService.loadAuthToken();
     await checkAuth();
   }
 
@@ -49,7 +49,6 @@ class AuthProvider extends ChangeNotifier {
         _user = User.fromJson(data['user']);
         _isAuthenticated = true;
       } else {
-        // Token was saved, now fetch user
         await checkAuth();
       }
     } finally {
@@ -87,6 +86,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await ApiService.logout();
     await ApiService.clearAuthToken();
     _user = null;
     _isAuthenticated = false;

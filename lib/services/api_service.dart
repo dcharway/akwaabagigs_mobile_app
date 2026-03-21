@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
+import 'package:flutter/material.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/back4app_config.dart';
 import '../models/job.dart';
 import '../models/user.dart';
 import '../models/conversation.dart';
@@ -12,36 +12,7 @@ import '../models/application.dart';
 import '../models/rating.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://akwaabagigs.replit.app';
-  static String? _authToken;
-
-  static void setAuthToken(String? token) {
-    _authToken = token;
-  }
-
-  static Map<String, String> get _headers {
-    final headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'User-Agent': 'AkwaabaGigs/1.0',
-    };
-    if (_authToken != null) {
-      headers['Authorization'] = 'Bearer $_authToken';
-    }
-    return headers;
-  }
-
-  /// Safely decode JSON response body. Throws a user-friendly error if the
-  /// response is HTML (e.g. Cloudflare challenge page) instead of JSON.
-  static dynamic _decodeResponse(http.Response response) {
-    final body = response.body.trim();
-    if (body.startsWith('<') || body.startsWith('<!')) {
-      throw Exception(
-        'Server is temporarily unavailable. Please try again in a moment.',
-      );
-    }
-    return json.decode(body);
-  }
+  static const String baseUrl = Back4AppConfig.serverUrl;
 
   // ============ AUTH ============
 
@@ -49,29 +20,18 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/login'),
-        headers: _headers,
-        body: json.encode({
-          'email': email,
-          'password': password,
-        }),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = _decodeResponse(response);
-        final token = data['token'] as String?;
-        if (token != null) {
-          await saveAuthToken(token);
-        }
-        return data;
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? error['message'] ?? 'Login failed');
-    } catch (e) {
-      if (e is Exception) rethrow;
-      throw Exception('Failed to connect to server: $e');
+    final user = ParseUser(email, password, email);
+    final response = await user.login();
+
+    if (response.success && response.result != null) {
+      final parseUser = response.result as ParseUser;
+      return {
+        'token': parseUser.sessionToken,
+        'user': _parseUserToMap(parseUser),
+      };
     }
+    throw Exception(
+        response.error?.message ?? 'Login failed');
   }
 
   static Future<Map<String, dynamic>> register({
@@ -80,110 +40,90 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/register'),
-        headers: _headers,
-        body: json.encode({
-          'firstName': firstName,
-          'lastName': lastName,
-          'email': email,
-          'password': password,
-        }),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = _decodeResponse(response);
-        final token = data['token'] as String?;
-        if (token != null) {
-          await saveAuthToken(token);
-        }
-        return data;
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? error['message'] ?? 'Registration failed');
-    } catch (e) {
-      if (e is Exception) rethrow;
-      throw Exception('Failed to connect to server: $e');
+    final user = ParseUser.createUser(email, password, email);
+    user.set('firstName', firstName);
+    user.set('lastName', lastName);
+
+    final response = await user.signUp();
+
+    if (response.success && response.result != null) {
+      final parseUser = response.result as ParseUser;
+      return {
+        'token': parseUser.sessionToken,
+        'user': _parseUserToMap(parseUser),
+      };
     }
+    throw Exception(
+        response.error?.message ?? 'Registration failed');
   }
 
   static Future<User?> getCurrentUser() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/auth/status'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final data = _decodeResponse(response);
-        if (data['user'] != null) {
-          return User.fromJson(data['user']);
-        }
-      }
-      return null;
-    } catch (e) {
-      return null;
+    final parseUser = await ParseUser.currentUser() as ParseUser?;
+    if (parseUser == null) return null;
+
+    // Verify session is still valid
+    final response = await ParseUser.getCurrentUserFromServer(
+        parseUser.sessionToken!);
+    if (response?.success == true && response?.result != null) {
+      final validUser = response!.result as ParseUser;
+      return User.fromJson(_parseUserToMap(validUser));
     }
+    return null;
   }
 
   static Future<void> logout() async {
-    try {
-      await http.get(
-        Uri.parse('$baseUrl/api/logout'),
-        headers: _headers,
-      );
-    } catch (e) {
-      // Ignore logout errors
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user != null) {
+      await user.logout();
     }
   }
 
   // ============ JOBS ============
 
   static Future<List<Job>> getJobs() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/jobs'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final List<dynamic> data = _decodeResponse(response);
-        return data.map((json) => Job.fromJson(json)).toList();
-      }
-      throw Exception('Failed to load jobs: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('Failed to connect: $e');
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.jobClass))
+      ..orderByDescending('createdAt');
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => Job.fromJson(_parseObjectToJobMap(e as ParseObject)))
+          .toList();
     }
+    if (response.results == null) return [];
+    throw Exception('Failed to load jobs: ${response.error?.message}');
   }
 
   static Future<Job?> getJob(String id) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/jobs/$id'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        return Job.fromJson(_decodeResponse(response));
-      }
-      if (response.statusCode == 404) return null;
-      throw Exception('Failed to load job: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('Failed to connect: $e');
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.jobClass))
+      ..whereEqualTo('objectId', id);
+
+    final response = await query.query();
+    if (response.success && response.results != null && response.results!.isNotEmpty) {
+      return Job.fromJson(
+          _parseObjectToJobMap(response.results!.first as ParseObject));
     }
+    return null;
   }
 
   static Future<List<Job>> getMyPostedJobs() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/gig-poster/jobs'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final List<dynamic> data = _decodeResponse(response);
-        return data.map((json) => Job.fromJson(json)).toList();
-      }
-      throw Exception('Failed to load your jobs: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('Failed to connect: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.jobClass))
+      ..whereEqualTo('posterId', user.objectId)
+      ..orderByDescending('createdAt');
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => Job.fromJson(_parseObjectToJobMap(e as ParseObject)))
+          .toList();
     }
+    return [];
   }
 
   static Future<Job> createJob({
@@ -199,65 +139,58 @@ class ApiService {
     List<String>? gigImages,
     int? offerAmount,
   }) async {
-    try {
-      final body = {
-        'title': title,
-        'company': company,
-        'description': description,
-        'location': location,
-        'salary': salary,
-        'employmentType': employmentType,
-        if (locationRange != null) 'locationRange': locationRange,
-        if (category != null) 'category': category,
-        if (requirements != null) 'requirements': requirements,
-        if (gigImages != null) 'gigImages': gigImages,
-        if (offerAmount != null) 'offerAmount': offerAmount,
-      };
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/jobs'),
-        headers: _headers,
-        body: json.encode(body),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return Job.fromJson(_decodeResponse(response));
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? 'Failed to create job');
-    } catch (e) {
-      throw Exception('Failed to create job: $e');
+    final job = ParseObject(Back4AppConfig.jobClass)
+      ..set('title', title)
+      ..set('company', company)
+      ..set('description', description)
+      ..set('location', location)
+      ..set('salary', salary)
+      ..set('employmentType', employmentType)
+      ..set('postedBy', user.get<String>('firstName') ?? user.username)
+      ..set('posterId', user.objectId)
+      ..set('status', 'active')
+      ..set('postedDate', DateTime.now().toIso8601String());
+
+    if (locationRange != null) job.set('locationRange', locationRange);
+    if (category != null) job.set('category', category);
+    if (requirements != null) job.set('requirements', requirements);
+    if (gigImages != null) job.set('gigImages', gigImages);
+    if (offerAmount != null) job.set('offerAmount', offerAmount);
+
+    final response = await job.save();
+    if (response.success && response.result != null) {
+      return Job.fromJson(
+          _parseObjectToJobMap(response.result as ParseObject));
     }
+    throw Exception('Failed to create job: ${response.error?.message}');
   }
 
   static Future<Job> updateJob(String id, Map<String, dynamic> updates) async {
-    try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl/api/jobs/$id'),
-        headers: _headers,
-        body: json.encode(updates),
-      );
-      if (response.statusCode == 200) {
-        return Job.fromJson(_decodeResponse(response));
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? 'Failed to update job');
-    } catch (e) {
-      throw Exception('Failed to update job: $e');
+    final job = ParseObject(Back4AppConfig.jobClass)
+      ..objectId = id;
+
+    updates.forEach((key, value) {
+      job.set(key, value);
+    });
+
+    final response = await job.save();
+    if (response.success && response.result != null) {
+      return Job.fromJson(
+          _parseObjectToJobMap(response.result as ParseObject));
     }
+    throw Exception('Failed to update job: ${response.error?.message}');
   }
 
   static Future<void> deleteJob(String id) async {
-    try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/api/jobs/$id'),
-        headers: _headers,
-      );
-      if (response.statusCode != 200 && response.statusCode != 204) {
-        final error = _decodeResponse(response);
-        throw Exception(error['error'] ?? 'Failed to delete job');
-      }
-    } catch (e) {
-      throw Exception('Failed to delete job: $e');
+    final job = ParseObject(Back4AppConfig.jobClass)
+      ..objectId = id;
+
+    final response = await job.delete();
+    if (!response.success) {
+      throw Exception('Failed to delete job: ${response.error?.message}');
     }
   }
 
@@ -274,28 +207,35 @@ class ApiService {
     String? idDocumentUrl,
     String? idDocumentType,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/applications'),
-        headers: _headers,
-        body: json.encode({
-          'jobId': jobId,
-          'fullName': fullName,
-          'email': email,
-          'phone': phone,
-          if (position != null) 'position': position,
-          if (location != null) 'location': location,
-          'coverLetter': coverLetter ?? '',
-          if (idDocumentUrl != null) 'idDocumentUrl': idDocumentUrl,
-          if (idDocumentType != null) 'idDocumentType': idDocumentType,
-        }),
-      );
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        final error = _decodeResponse(response);
-        throw Exception(error['error'] ?? 'Failed to submit application');
-      }
-    } catch (e) {
-      throw Exception('Failed to submit application: $e');
+    final application = ParseObject(Back4AppConfig.applicationClass)
+      ..set('jobId', jobId)
+      ..set('fullName', fullName)
+      ..set('email', email)
+      ..set('phone', phone)
+      ..set('coverLetter', coverLetter ?? '')
+      ..set('status', 'pending_verification')
+      ..set('applicationDate', DateTime.now().toIso8601String());
+
+    if (position != null) application.set('position', position);
+    if (location != null) application.set('location', location);
+    if (idDocumentUrl != null) application.set('idDocumentUrl', idDocumentUrl);
+    if (idDocumentType != null) application.set('idDocumentType', idDocumentType);
+
+    // Attach job title/company for display purposes
+    final jobQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.jobClass))
+      ..whereEqualTo('objectId', jobId);
+    final jobResponse = await jobQuery.query();
+    if (jobResponse.success && jobResponse.results != null && jobResponse.results!.isNotEmpty) {
+      final jobObj = jobResponse.results!.first as ParseObject;
+      application.set('jobTitle', jobObj.get<String>('title'));
+      application.set('jobCompany', jobObj.get<String>('company'));
+    }
+
+    final response = await application.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to submit application: ${response.error?.message}');
     }
   }
 
@@ -303,56 +243,67 @@ class ApiService {
     String? email,
     String? jobId,
   }) async {
-    try {
-      final queryParams = <String, String>{};
-      if (email != null) queryParams['email'] = email;
-      if (jobId != null) queryParams['jobId'] = jobId;
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.applicationClass))
+      ..orderByDescending('createdAt');
 
-      final uri = Uri.parse('$baseUrl/api/applications')
-          .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
+    if (email != null) query.whereEqualTo('email', email);
+    if (jobId != null) query.whereEqualTo('jobId', jobId);
 
-      final response = await http.get(uri, headers: _headers);
-      if (response.statusCode == 200) {
-        final List<dynamic> data = _decodeResponse(response);
-        return data.map((json) => Application.fromJson(json)).toList();
-      }
-      throw Exception('Failed to load applications: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('Failed to connect: $e');
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => Application.fromJson(
+              _parseObjectToApplicationMap(e as ParseObject)))
+          .toList();
     }
+    return [];
   }
 
   static Future<Application?> getApplication(String id) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/applications/$id'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        return Application.fromJson(_decodeResponse(response));
-      }
-      return null;
-    } catch (e) {
-      return null;
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.applicationClass))
+      ..whereEqualTo('objectId', id);
+
+    final response = await query.query();
+    if (response.success && response.results != null && response.results!.isNotEmpty) {
+      return Application.fromJson(
+          _parseObjectToApplicationMap(response.results!.first as ParseObject));
     }
+    return null;
   }
 
   // ============ CONVERSATIONS & MESSAGES ============
 
   static Future<List<Conversation>> getConversations() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/conversations'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final List<dynamic> data = _decodeResponse(response);
-        return data.map((json) => Conversation.fromJson(json)).toList();
-      }
-      throw Exception('Failed to load conversations: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('Failed to connect: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.conversationClass));
+
+    // Get conversations where user is either poster or seeker
+    final posterQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.conversationClass))
+      ..whereEqualTo('posterId', user.objectId);
+
+    final seekerQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.conversationClass))
+      ..whereEqualTo('seekerEmail', user.emailAddress);
+
+    final mainQuery = QueryBuilder.or(
+        ParseObject(Back4AppConfig.conversationClass),
+        [posterQuery, seekerQuery])
+      ..orderByDescending('lastMessageAt');
+
+    final response = await mainQuery.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => Conversation.fromJson(
+              _parseObjectToConversationMap(e as ParseObject)))
+          .toList();
     }
+    return [];
   }
 
   static Future<Conversation> createConversation({
@@ -362,107 +313,121 @@ class ApiService {
     String? seekerEmail,
     String? seekerName,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/conversations'),
-        headers: _headers,
-        body: json.encode({
-          'jobId': jobId,
-          'posterId': posterId,
-          'posterName': posterName,
-          if (seekerEmail != null) 'seekerEmail': seekerEmail,
-          if (seekerName != null) 'seekerName': seekerName,
-        }),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return Conversation.fromJson(_decodeResponse(response));
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? 'Failed to create conversation');
-    } catch (e) {
-      throw Exception('Failed to create conversation: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final conversation = ParseObject(Back4AppConfig.conversationClass)
+      ..set('jobId', jobId)
+      ..set('posterId', posterId)
+      ..set('posterName', posterName)
+      ..set('seekerEmail', seekerEmail ?? user.emailAddress)
+      ..set('seekerName', seekerName ?? user.get<String>('firstName') ?? '')
+      ..set('lastMessageAt', DateTime.now().toIso8601String());
+
+    // Look up job title
+    final jobQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.jobClass))
+      ..whereEqualTo('objectId', jobId);
+    final jobResponse = await jobQuery.query();
+    if (jobResponse.success && jobResponse.results != null && jobResponse.results!.isNotEmpty) {
+      final jobObj = jobResponse.results!.first as ParseObject;
+      conversation.set('jobTitle', jobObj.get<String>('title'));
     }
+
+    final response = await conversation.save();
+    if (response.success && response.result != null) {
+      return Conversation.fromJson(
+          _parseObjectToConversationMap(response.result as ParseObject));
+    }
+    throw Exception(
+        'Failed to create conversation: ${response.error?.message}');
   }
 
   static Future<List<Message>> getMessages(String conversationId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/conversations/$conversationId/messages'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final List<dynamic> data = _decodeResponse(response);
-        return data.map((json) => Message.fromJson(json)).toList();
-      }
-      throw Exception('Failed to load messages: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('Failed to connect: $e');
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.messageClass))
+      ..whereEqualTo('conversationId', conversationId)
+      ..orderByAscending('createdAt');
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => Message.fromJson(
+              _parseObjectToMessageMap(e as ParseObject)))
+          .toList();
     }
+    return [];
   }
 
   static Future<Message> sendMessage({
     required String conversationId,
     required String content,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/conversations/$conversationId/messages'),
-        headers: _headers,
-        body: json.encode({'content': content}),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return Message.fromJson(_decodeResponse(response));
-      }
-      throw Exception('Failed to send message: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('Failed to send message: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final message = ParseObject(Back4AppConfig.messageClass)
+      ..set('conversationId', conversationId)
+      ..set('senderId', user.objectId)
+      ..set('senderName',
+          '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'.trim())
+      ..set('content', content)
+      ..set('isRead', false);
+
+    final response = await message.save();
+    if (response.success && response.result != null) {
+      // Update conversation's lastMessageAt
+      final conversation = ParseObject(Back4AppConfig.conversationClass)
+        ..objectId = conversationId
+        ..set('lastMessageAt', DateTime.now().toIso8601String());
+      await conversation.save();
+
+      return Message.fromJson(
+          _parseObjectToMessageMap(response.result as ParseObject));
     }
+    throw Exception('Failed to send message: ${response.error?.message}');
   }
 
   static Future<void> reportMessage(String messageId) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/messages/$messageId/report'),
-        headers: _headers,
-      );
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        throw Exception('Failed to report message');
-      }
-    } catch (e) {
-      throw Exception('Failed to report message: $e');
+    final message = ParseObject(Back4AppConfig.messageClass)
+      ..objectId = messageId
+      ..set('flagged', 'reported');
+
+    final response = await message.save();
+    if (!response.success) {
+      throw Exception('Failed to report message');
     }
   }
 
   // ============ GIG SEEKER PROFILE ============
 
   static Future<GigSeeker?> getGigSeekerProfile() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/gig-seeker/profile'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        return GigSeeker.fromJson(_decodeResponse(response));
-      }
-      return null;
-    } catch (e) {
-      return null;
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) return null;
+
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.gigSeekerClass))
+      ..whereEqualTo('email', user.emailAddress);
+
+    final response = await query.query();
+    if (response.success && response.results != null && response.results!.isNotEmpty) {
+      return GigSeeker.fromJson(
+          _parseObjectToGigSeekerMap(response.results!.first as ParseObject));
     }
+    return null;
   }
 
   static Future<GigSeeker?> getGigSeekerProfileByEmail(String email) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/gig-seeker-profile/$email'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        return GigSeeker.fromJson(_decodeResponse(response));
-      }
-      return null;
-    } catch (e) {
-      return null;
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.gigSeekerClass))
+      ..whereEqualTo('email', email);
+
+    final response = await query.query();
+    if (response.success && response.results != null && response.results!.isNotEmpty) {
+      return GigSeeker.fromJson(
+          _parseObjectToGigSeekerMap(response.results!.first as ParseObject));
     }
+    return null;
   }
 
   static Future<GigSeeker> registerGigSeeker({
@@ -471,60 +436,66 @@ class ApiService {
     required String phone,
     required String location,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/gig-seeker/register'),
-        headers: _headers,
-        body: json.encode({
-          'email': email,
-          'fullName': fullName,
-          'phone': phone,
-          'location': location,
-        }),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return GigSeeker.fromJson(_decodeResponse(response));
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? 'Failed to register');
-    } catch (e) {
-      throw Exception('Failed to register: $e');
+    final seeker = ParseObject(Back4AppConfig.gigSeekerClass)
+      ..set('email', email)
+      ..set('fullName', fullName)
+      ..set('phone', phone)
+      ..set('location', location)
+      ..set('verificationStatus', 'unverified')
+      ..set('canChat', false);
+
+    final response = await seeker.save();
+    if (response.success && response.result != null) {
+      return GigSeeker.fromJson(
+          _parseObjectToGigSeekerMap(response.result as ParseObject));
     }
+    throw Exception('Failed to register: ${response.error?.message}');
   }
 
   static Future<GigSeeker> updateGigSeekerProfile(
       Map<String, dynamic> updates) async {
-    try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl/api/gig-seeker-profile'),
-        headers: _headers,
-        body: json.encode(updates),
-      );
-      if (response.statusCode == 200) {
-        return GigSeeker.fromJson(_decodeResponse(response));
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? 'Failed to update profile');
-    } catch (e) {
-      throw Exception('Failed to update profile: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    // Find existing profile
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.gigSeekerClass))
+      ..whereEqualTo('email', user.emailAddress);
+
+    final findResponse = await query.query();
+    if (!findResponse.success || findResponse.results == null || findResponse.results!.isEmpty) {
+      throw Exception('Profile not found');
     }
+
+    final seeker = findResponse.results!.first as ParseObject;
+    updates.forEach((key, value) {
+      seeker.set(key, value);
+    });
+
+    final response = await seeker.save();
+    if (response.success && response.result != null) {
+      return GigSeeker.fromJson(
+          _parseObjectToGigSeekerMap(response.result as ParseObject));
+    }
+    throw Exception('Failed to update profile: ${response.error?.message}');
   }
 
   // ============ GIG POSTER PROFILE ============
 
   static Future<GigPoster?> getGigPosterProfile() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/gig-poster/profile'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        return GigPoster.fromJson(_decodeResponse(response));
-      }
-      return null;
-    } catch (e) {
-      return null;
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) return null;
+
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.gigPosterClass))
+      ..whereEqualTo('userId', user.objectId);
+
+    final response = await query.query();
+    if (response.success && response.results != null && response.results!.isNotEmpty) {
+      return GigPoster.fromJson(
+          _parseObjectToGigPosterMap(response.results!.first as ParseObject));
     }
+    return null;
   }
 
   static Future<GigPoster> createGigPosterProfile({
@@ -535,68 +506,83 @@ class ApiService {
     required String location,
     String? website,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/gig-poster/profile'),
-        headers: _headers,
-        body: json.encode({
-          'businessName': businessName,
-          if (businessDescription != null)
-            'businessDescription': businessDescription,
-          'contactEmail': contactEmail,
-          'contactPhone': contactPhone,
-          'location': location,
-          if (website != null) 'website': website,
-        }),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return GigPoster.fromJson(_decodeResponse(response));
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? 'Failed to create profile');
-    } catch (e) {
-      throw Exception('Failed to create profile: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final poster = ParseObject(Back4AppConfig.gigPosterClass)
+      ..set('userId', user.objectId)
+      ..set('businessName', businessName)
+      ..set('contactEmail', contactEmail)
+      ..set('contactPhone', contactPhone)
+      ..set('location', location)
+      ..set('verificationStatus', 'unverified');
+
+    if (businessDescription != null) {
+      poster.set('businessDescription', businessDescription);
     }
+    if (website != null) poster.set('website', website);
+
+    final response = await poster.save();
+    if (response.success && response.result != null) {
+      return GigPoster.fromJson(
+          _parseObjectToGigPosterMap(response.result as ParseObject));
+    }
+    throw Exception('Failed to create profile: ${response.error?.message}');
   }
 
   static Future<GigPoster> updateGigPosterProfile(
       Map<String, dynamic> updates) async {
-    try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl/api/gig-poster/profile'),
-        headers: _headers,
-        body: json.encode(updates),
-      );
-      if (response.statusCode == 200) {
-        return GigPoster.fromJson(_decodeResponse(response));
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? 'Failed to update profile');
-    } catch (e) {
-      throw Exception('Failed to update profile: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.gigPosterClass))
+      ..whereEqualTo('userId', user.objectId);
+
+    final findResponse = await query.query();
+    if (!findResponse.success || findResponse.results == null || findResponse.results!.isEmpty) {
+      throw Exception('Profile not found');
     }
+
+    final poster = findResponse.results!.first as ParseObject;
+    updates.forEach((key, value) {
+      poster.set(key, value);
+    });
+
+    final response = await poster.save();
+    if (response.success && response.result != null) {
+      return GigPoster.fromJson(
+          _parseObjectToGigPosterMap(response.result as ParseObject));
+    }
+    throw Exception('Failed to update profile: ${response.error?.message}');
   }
 
   static Future<void> submitVerification({
     required String ghCardNumber,
     required String contactPhone,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/gig-poster/submit-verification'),
-        headers: _headers,
-        body: json.encode({
-          'ghCardNumber': ghCardNumber,
-          'contactPhone': contactPhone,
-        }),
-      );
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        final error = _decodeResponse(response);
-        throw Exception(
-            error['error'] ?? 'Failed to submit verification');
-      }
-    } catch (e) {
-      throw Exception('Failed to submit verification: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.gigPosterClass))
+      ..whereEqualTo('userId', user.objectId);
+
+    final findResponse = await query.query();
+    if (!findResponse.success || findResponse.results == null || findResponse.results!.isEmpty) {
+      throw Exception('Profile not found');
+    }
+
+    final poster = findResponse.results!.first as ParseObject;
+    poster
+      ..set('ghCardNumber', ghCardNumber)
+      ..set('contactPhone', contactPhone)
+      ..set('verificationStatus', 'pending');
+
+    final response = await poster.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to submit verification: ${response.error?.message}');
     }
   }
 
@@ -608,122 +594,47 @@ class ApiService {
     String fieldName = 'file',
     Map<String, String>? extraFields,
   }) async {
-    try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl$endpoint'),
-      );
+    final fileName = file.path.split('/').last;
+    final parseFile = ParseFile(file, name: fileName);
 
-      if (_authToken != null) {
-        request.headers['Authorization'] = 'Bearer $_authToken';
-      }
-
-      if (extraFields != null) {
-        request.fields.addAll(extraFields);
-      }
-
-      final mimeType = _getMimeType(file.path);
-      request.files.add(await http.MultipartFile.fromPath(
-        fieldName,
-        file.path,
-        contentType: mimeType != null ? MediaType.parse(mimeType) : null,
-      ));
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = _decodeResponse(response);
-        return data['url'] ?? data['fileUrl'] ?? '';
-      }
-      final error = _decodeResponse(response);
-      throw Exception(error['error'] ?? 'Upload failed');
-    } catch (e) {
-      throw Exception('Failed to upload file: $e');
+    final response = await parseFile.save();
+    if (response.success && parseFile.url != null) {
+      return parseFile.url!;
     }
+    throw Exception('Upload failed: ${response.error?.message}');
   }
 
   static Future<String> uploadGhCard(File file) async {
     return uploadFile(
-      endpoint: '/api/upload/gh-card',
+      endpoint: '',
       file: file,
       fieldName: 'ghCard',
     );
   }
 
   static Future<List<String>> uploadGigImages(List<File> files) async {
-    try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl/api/upload/gig-images'),
-      );
-
-      if (_authToken != null) {
-        request.headers['Authorization'] = 'Bearer $_authToken';
+    final urls = <String>[];
+    for (final file in files) {
+      final fileName = file.path.split('/').last;
+      final parseFile = ParseFile(file, name: fileName);
+      final response = await parseFile.save();
+      if (response.success && parseFile.url != null) {
+        urls.add(parseFile.url!);
+      } else {
+        throw Exception('Failed to upload image');
       }
-
-      for (final file in files) {
-        final mimeType = _getMimeType(file.path);
-        request.files.add(await http.MultipartFile.fromPath(
-          'gigImages',
-          file.path,
-          contentType: mimeType != null ? MediaType.parse(mimeType) : null,
-        ));
-      }
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = _decodeResponse(response);
-        return List<String>.from(data['urls'] ?? []);
-      }
-      throw Exception('Failed to upload images');
-    } catch (e) {
-      throw Exception('Failed to upload images: $e');
     }
+    return urls;
   }
 
   static Future<String> uploadProfilePicture(File file,
       {required bool isPoster}) async {
-    return uploadFile(
-      endpoint: isPoster
-          ? '/api/upload/poster-profile-picture'
-          : '/api/upload/seeker-profile-picture',
-      file: file,
-      fieldName: 'profilePicture',
-    );
+    return uploadFile(endpoint: '', file: file, fieldName: 'profilePicture');
   }
 
   static Future<String> uploadIdDocument(File file,
       {required String email}) async {
-    return uploadFile(
-      endpoint: '/api/upload/id-document',
-      file: file,
-      fieldName: 'idDocument',
-      extraFields: {'email': email},
-    );
-  }
-
-  static String? _getMimeType(String path) {
-    final ext = path.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      case 'gif':
-        return 'image/gif';
-      case 'pdf':
-        return 'application/pdf';
-      case 'doc':
-        return 'application/msword';
-      case 'docx':
-        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      default:
-        return null;
-    }
+    return uploadFile(endpoint: '', file: file, fieldName: 'idDocument');
   }
 
   // ============ RATINGS ============
@@ -736,81 +647,91 @@ class ApiService {
     required int rating,
     String? review,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/ratings'),
-        headers: _headers,
-        body: json.encode({
-          'jobId': jobId,
-          'applicationId': applicationId,
-          'gigSeekerId': gigSeekerId,
-          'gigSeekerName': gigSeekerName,
-          'rating': rating,
-          if (review != null && review.isNotEmpty) 'review': review,
-        }),
-      );
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        final error = _decodeResponse(response);
-        throw Exception(error['error'] ?? 'Failed to submit rating');
-      }
-    } catch (e) {
-      throw Exception('Failed to submit rating: $e');
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final ratingObj = ParseObject(Back4AppConfig.ratingClass)
+      ..set('jobId', jobId)
+      ..set('applicationId', applicationId)
+      ..set('posterId', user.objectId)
+      ..set('posterName',
+          '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'.trim())
+      ..set('gigSeekerId', gigSeekerId)
+      ..set('gigSeekerName', gigSeekerName)
+      ..set('rating', rating);
+
+    if (review != null && review.isNotEmpty) {
+      ratingObj.set('review', review);
+    }
+
+    final response = await ratingObj.save();
+    if (!response.success) {
+      throw Exception('Failed to submit rating: ${response.error?.message}');
     }
   }
 
   static Future<SeekerRatingSummary?> getSeekerRatings(String email) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/ratings/gig-seeker/$email'),
-        headers: _headers,
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.ratingClass))
+      ..whereEqualTo('gigSeekerId', email)
+      ..orderByDescending('createdAt');
+
+    final response = await query.query();
+    if (response.success) {
+      final ratings = (response.results ?? [])
+          .map((e) =>
+              Rating.fromJson(_parseObjectToRatingMap(e as ParseObject)))
+          .toList();
+
+      if (ratings.isEmpty) return null;
+
+      final totalRatings = ratings.length;
+      final averageRating =
+          ratings.map((r) => r.rating).reduce((a, b) => a + b) / totalRatings;
+
+      return SeekerRatingSummary(
+        averageRating: averageRating,
+        totalRatings: totalRatings,
+        ratings: ratings,
       );
-      if (response.statusCode == 200) {
-        return SeekerRatingSummary.fromJson(_decodeResponse(response));
-      }
-      return null;
-    } catch (e) {
-      return null;
     }
+    return null;
   }
 
   static Future<bool> checkRatingExists(
       String jobId, String applicationId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/ratings/check/$jobId/$applicationId'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final data = _decodeResponse(response);
-        return data['exists'] == true;
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.ratingClass))
+      ..whereEqualTo('jobId', jobId)
+      ..whereEqualTo('applicationId', applicationId);
+
+    final response = await query.query();
+    return response.success &&
+        response.results != null &&
+        response.results!.isNotEmpty;
   }
 
   // ============ AUTH TOKEN MANAGEMENT ============
+  // Parse SDK handles session tokens internally, but we keep these
+  // for compatibility with the rest of the app.
+
+  static void setAuthToken(String? token) {
+    // Parse SDK manages tokens internally
+  }
 
   static Future<void> saveAuthToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
-    setAuthToken(token);
   }
 
   static Future<String?> loadAuthToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    if (token != null) {
-      setAuthToken(token);
-    }
-    return token;
+    return prefs.getString('auth_token');
   }
 
   static Future<void> clearAuthToken() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
-    setAuthToken(null);
   }
 
   // ============ SAVED JOBS (Local) ============
@@ -839,5 +760,152 @@ class ApiService {
   static Future<bool> isJobSaved(String jobId) async {
     final saved = await getSavedJobIds();
     return saved.contains(jobId);
+  }
+
+  // ============ PARSE OBJECT CONVERTERS ============
+  // Convert ParseObjects to Maps that match the existing model fromJson methods
+
+  static Map<String, dynamic> _parseUserToMap(ParseUser user) {
+    return {
+      'id': user.objectId ?? '',
+      'email': user.emailAddress ?? '',
+      'firstName': user.get<String>('firstName') ?? '',
+      'lastName': user.get<String>('lastName') ?? '',
+      'profileImageUrl': user.get<String>('profileImageUrl'),
+      'createdAt': user.createdAt?.toIso8601String(),
+      'updatedAt': user.updatedAt?.toIso8601String(),
+    };
+  }
+
+  static Map<String, dynamic> _parseObjectToJobMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'title': obj.get<String>('title') ?? '',
+      'company': obj.get<String>('company') ?? '',
+      'description': obj.get<String>('description') ?? '',
+      'location': obj.get<String>('location') ?? '',
+      'locationRange': obj.get<String>('locationRange'),
+      'salary': obj.get<String>('salary') ?? '',
+      'employmentType': obj.get<String>('employmentType') ?? '',
+      'requirements': obj.get<List>('requirements')?.cast<String>() ?? [],
+      'gigImages': obj.get<List>('gigImages')?.cast<String>() ?? [],
+      'postedBy': obj.get<String>('postedBy') ?? '',
+      'posterId': obj.get<String>('posterId') ?? '',
+      'postedDate': obj.get<String>('postedDate') ??
+          obj.createdAt?.toIso8601String() ??
+          '',
+      'status': obj.get<String>('status') ?? 'active',
+      'category': obj.get<String>('category'),
+    };
+  }
+
+  static Map<String, dynamic> _parseObjectToApplicationMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'jobId': obj.get<String>('jobId') ?? '',
+      'email': obj.get<String>('email') ?? '',
+      'fullName': obj.get<String>('fullName') ?? '',
+      'phone': obj.get<String>('phone') ?? '',
+      'position': obj.get<String>('position'),
+      'idDocumentName': obj.get<String>('idDocumentName'),
+      'idDocumentType': obj.get<String>('idDocumentType'),
+      'resumeName': obj.get<String>('resumeName'),
+      'applicationDate': obj.get<String>('applicationDate') ??
+          obj.createdAt?.toIso8601String() ??
+          '',
+      'status': obj.get<String>('status') ?? 'pending_verification',
+      'verificationResult': obj.get<Map<String, dynamic>>('verificationResult'),
+      'verifiedDate': obj.get<String>('verifiedDate'),
+      'rejectionReason': obj.get<String>('rejectionReason'),
+      'rejectionResolution': obj.get<String>('rejectionResolution'),
+      'jobTitle': obj.get<String>('jobTitle'),
+      'jobCompany': obj.get<String>('jobCompany'),
+    };
+  }
+
+  static Map<String, dynamic> _parseObjectToConversationMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'jobId': obj.get<String>('jobId'),
+      'jobTitle': obj.get<String>('jobTitle'),
+      'posterId': obj.get<String>('posterId') ?? '',
+      'posterName': obj.get<String>('posterName') ?? '',
+      'seekerEmail': obj.get<String>('seekerEmail') ?? '',
+      'seekerName': obj.get<String>('seekerName') ?? '',
+      'lastMessageAt': obj.get<String>('lastMessageAt'),
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+    };
+  }
+
+  static Map<String, dynamic> _parseObjectToMessageMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'conversationId': obj.get<String>('conversationId') ?? '',
+      'senderId': obj.get<String>('senderId') ?? '',
+      'senderName': obj.get<String>('senderName') ?? '',
+      'content': obj.get<String>('content') ?? '',
+      'fileUrl': obj.get<String>('fileUrl'),
+      'fileName': obj.get<String>('fileName'),
+      'fileType': obj.get<String>('fileType'),
+      'isRead': obj.get<bool>('isRead') ?? false,
+      'flagged': obj.get<String>('flagged'),
+      'flagCategory': obj.get<String>('flagCategory'),
+      'censored': obj.get<String>('censored'),
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+    };
+  }
+
+  static Map<String, dynamic> _parseObjectToGigSeekerMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'email': obj.get<String>('email') ?? '',
+      'fullName': obj.get<String>('fullName') ?? '',
+      'phone': obj.get<String>('phone') ?? '',
+      'location': obj.get<String>('location') ?? '',
+      'skills': obj.get<String>('skills'),
+      'experience': obj.get<String>('experience'),
+      'idDocumentUrl': obj.get<String>('idDocumentUrl'),
+      'verificationStatus':
+          obj.get<String>('verificationStatus') ?? 'unverified',
+      'rejectionReason': obj.get<String>('rejectionReason'),
+      'canChat': obj.get<bool>('canChat') ?? false,
+      'profilePictureUrl': obj.get<String>('profilePictureUrl'),
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+      'updatedAt': obj.updatedAt?.toIso8601String() ?? '',
+    };
+  }
+
+  static Map<String, dynamic> _parseObjectToGigPosterMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'userId': obj.get<String>('userId'),
+      'businessName': obj.get<String>('businessName') ?? '',
+      'businessDescription': obj.get<String>('businessDescription'),
+      'contactEmail': obj.get<String>('contactEmail') ?? '',
+      'contactPhone': obj.get<String>('contactPhone') ?? '',
+      'location': obj.get<String>('location') ?? '',
+      'ghCardUrl': obj.get<String>('ghCardUrl'),
+      'verificationStatus':
+          obj.get<String>('verificationStatus') ?? 'unverified',
+      'rejectionReason': obj.get<String>('rejectionReason'),
+      'profilePictureUrl': obj.get<String>('profilePictureUrl'),
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+      'updatedAt': obj.updatedAt?.toIso8601String() ?? '',
+    };
+  }
+
+  static Map<String, dynamic> _parseObjectToRatingMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'jobId': obj.get<String>('jobId') ?? '',
+      'applicationId': obj.get<String>('applicationId') ?? '',
+      'posterId': obj.get<String>('posterId') ?? '',
+      'posterName': obj.get<String>('posterName') ?? '',
+      'gigSeekerId': obj.get<String>('gigSeekerId') ?? '',
+      'gigSeekerName': obj.get<String>('gigSeekerName') ?? '',
+      'rating': obj.get<int>('rating') ?? 0,
+      'review': obj.get<String>('review'),
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+    };
   }
 }
