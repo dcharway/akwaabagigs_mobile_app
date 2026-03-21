@@ -6,9 +6,9 @@
         </trust-anchors>
     </base-config>
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">akwaabagigs.replit.app</domain>
-        <domain includeSubdomains="true">talent-connect-secure.replit.app</domain>
-        <domain includeSubdomains="true">replit.app</domain>
+        <domain includeSubdomains="true">parseapi.back4app.com</domain>
+        <domain includeSubdomains="true">akwaabagigs.b4a.io</domain>
+        <domain includeSubdomains="true">back4app.com</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
