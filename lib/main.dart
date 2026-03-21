@@ -1,12 +1,26 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import 'package:provider/provider.dart';
+import 'config/back4app_config.dart';
 import 'providers/auth_provider.dart';
 import 'providers/jobs_provider.dart';
 import 'providers/notifications_provider.dart';
 import 'screens/home_screen.dart';
-void main() {
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Back4App Parse SDK
+  await Parse().initialize(
+    Back4AppConfig.applicationId,
+    Back4AppConfig.serverUrl,
+    clientKey: Back4AppConfig.clientKey,
+    autoSendSessionId: true,
+    debug: false,
+    liveQueryUrl: Back4AppConfig.liveQueryUrl,
+  );
+
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     debugPrint('Flutter error: ${details.exception}');
