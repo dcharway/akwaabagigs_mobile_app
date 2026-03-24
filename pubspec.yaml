@@ -20,6 +20,8 @@ dependencies:
   web_socket_channel: ^2.4.5
   image_picker: ^1.1.1
   parse_server_sdk_flutter: ^10.7.0
+  carousel_slider: ^5.0.0
+  smooth_page_indicator: ^1.1.0
 
 dev_dependencies:
   flutter_test:
