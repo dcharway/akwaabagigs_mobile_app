@@ -279,10 +279,16 @@ class ApiService {
     final user = await ParseUser.currentUser() as ParseUser?;
     if (user == null) throw Exception('Not authenticated');
 
-    final query = QueryBuilder<ParseObject>(
-        ParseObject(Back4AppConfig.conversationClass));
+    // Get conversations where user is either participant
+    final participantAQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.conversationClass))
+      ..whereEqualTo('participantA', user.objectId);
 
-    // Get conversations where user is either poster or seeker
+    final participantBQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.conversationClass))
+      ..whereEqualTo('participantB', user.objectId);
+
+    // Also check legacy fields for backward compatibility
     final posterQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('posterId', user.objectId);
@@ -293,15 +299,23 @@ class ApiService {
 
     final mainQuery = QueryBuilder.or(
         ParseObject(Back4AppConfig.conversationClass),
-        [posterQuery, seekerQuery])
+        [participantAQuery, participantBQuery, posterQuery, seekerQuery])
       ..orderByDescending('lastMessageAt');
 
     final response = await mainQuery.query();
     if (response.success && response.results != null) {
-      return response.results!
-          .map((e) => Conversation.fromJson(
-              _parseObjectToConversationMap(e as ParseObject)))
-          .toList();
+      // Deduplicate by objectId in case multiple queries match same conversation
+      final seen = <String>{};
+      final conversations = <Conversation>[];
+      for (final e in response.results!) {
+        final obj = e as ParseObject;
+        final id = obj.objectId ?? '';
+        if (seen.add(id)) {
+          conversations.add(
+              Conversation.fromJson(_parseObjectToConversationMap(obj)));
+        }
+      }
+      return conversations;
     }
     return [];
   }
@@ -316,12 +330,40 @@ class ApiService {
     final user = await ParseUser.currentUser() as ParseUser?;
     if (user == null) throw Exception('Not authenticated');
 
+    final resolvedSeekerEmail = seekerEmail ?? user.emailAddress ?? '';
+    final resolvedSeekerName =
+        seekerName ?? user.get<String>('firstName') ?? '';
+
+    // Determine participantA (poster) and participantB (seeker)
+    // participantA is always the poster's userId
+    // participantB is the seeker's userId (or email as fallback identifier)
+    final participantA = posterId;
+    final participantB = resolvedSeekerEmail;
+
+    // Check for existing conversation between these participants for this job
+    final existingQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.conversationClass))
+      ..whereEqualTo('participantA', participantA)
+      ..whereEqualTo('participantB', participantB)
+      ..whereEqualTo('jobId', jobId);
+
+    final existingResponse = await existingQuery.query();
+    if (existingResponse.success &&
+        existingResponse.results != null &&
+        existingResponse.results!.isNotEmpty) {
+      // Return existing conversation instead of creating a duplicate
+      return Conversation.fromJson(_parseObjectToConversationMap(
+          existingResponse.results!.first as ParseObject));
+    }
+
     final conversation = ParseObject(Back4AppConfig.conversationClass)
       ..set('jobId', jobId)
       ..set('posterId', posterId)
       ..set('posterName', posterName)
-      ..set('seekerEmail', seekerEmail ?? user.emailAddress)
-      ..set('seekerName', seekerName ?? user.get<String>('firstName') ?? '')
+      ..set('seekerEmail', resolvedSeekerEmail)
+      ..set('seekerName', resolvedSeekerName)
+      ..set('participantA', participantA)
+      ..set('participantB', participantB)
       ..set('lastMessageAt', DateTime.now().toIso8601String());
 
     // Look up job title
@@ -832,6 +874,8 @@ class ApiService {
       'posterName': obj.get<String>('posterName') ?? '',
       'seekerEmail': obj.get<String>('seekerEmail') ?? '',
       'seekerName': obj.get<String>('seekerName') ?? '',
+      'participantA': obj.get<String>('participantA') ?? '',
+      'participantB': obj.get<String>('participantB') ?? '',
       'lastMessageAt': obj.get<String>('lastMessageAt'),
       'createdAt': obj.createdAt?.toIso8601String() ?? '',
     };

@@ -6,6 +6,8 @@ class Conversation {
   final String posterName;
   final String seekerEmail;
   final String seekerName;
+  final String participantA;
+  final String participantB;
   final DateTime? lastMessageAt;
   final DateTime createdAt;
 
@@ -17,6 +19,8 @@ class Conversation {
     required this.posterName,
     required this.seekerEmail,
     required this.seekerName,
+    required this.participantA,
+    required this.participantB,
     this.lastMessageAt,
     required this.createdAt,
   });
@@ -30,6 +34,8 @@ class Conversation {
       posterName: json['posterName'] ?? '',
       seekerEmail: json['seekerEmail'] ?? '',
       seekerName: json['seekerName'] ?? '',
+      participantA: json['participantA'] ?? json['posterId'] ?? '',
+      participantB: json['participantB'] ?? json['seekerEmail'] ?? '',
       lastMessageAt: json['lastMessageAt'] != null
           ? DateTime.tryParse(json['lastMessageAt'])
           : null,
@@ -46,6 +52,8 @@ class Conversation {
       'posterName': posterName,
       'seekerEmail': seekerEmail,
       'seekerName': seekerName,
+      'participantA': participantA,
+      'participantB': participantB,
       'lastMessageAt': lastMessageAt?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
     };

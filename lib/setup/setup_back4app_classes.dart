@@ -109,6 +109,8 @@ Future<void> main() async {
     'posterName': '_seed_',
     'seekerEmail': '_seed_',
     'seekerName': '_seed_',
+    'participantA': '_seed_',
+    'participantB': '_seed_',
     'lastMessageAt': '_seed_',
   });
 
