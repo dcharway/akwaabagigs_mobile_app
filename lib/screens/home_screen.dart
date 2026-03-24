@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../utils/colors.dart';
 import '../providers/jobs_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notifications_provider.dart';
 import '../models/job.dart';
 import '../widgets/job_card.dart';
+import '../widgets/header_widget.dart';
+import '../widgets/search_bar_widget.dart';
+import '../widgets/ad_carousel_widget.dart';
+import '../widgets/quick_stats_widget.dart';
+import '../widgets/popular_gigs_widget.dart';
+import '../widgets/services_grid_widget.dart';
 import 'job_details_screen.dart';
 import 'chat_list_screen.dart';
 import 'profile_screen.dart';
@@ -25,6 +32,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -41,88 +49,34 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  void _switchToGigsTab() {
+    setState(() {
+      _currentIndex = 1;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final notifProvider = context.watch<NotificationsProvider>();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Akwaaba Gigs',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        elevation: 0,
-        actions: [
-          if (authProvider.isAuthenticated) ...[
-            IconButton(
-              icon: const Icon(Icons.bookmark_border),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SavedGigsScreen()),
-              ),
-              tooltip: 'Saved Gigs',
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (value) {
-                switch (value) {
-                  case 'my_gigs':
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const MyGigsScreen()),
-                    );
-                    break;
-                  case 'my_applications':
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              const MyApplicationsScreen()),
-                    );
-                    break;
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'my_gigs',
-                  child: Row(
-                    children: [
-                      Icon(Icons.work_history_outlined),
-                      SizedBox(width: 8),
-                      Text('My Posted Gigs'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'my_applications',
-                  child: Row(
-                    children: [
-                      Icon(Icons.assignment_outlined),
-                      SizedBox(width: 8),
-                      Text('My Applications'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
+      key: _scaffoldKey,
+      drawer: _buildDrawer(context, authProvider),
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _buildJobsTab(),
+          _buildHomeLanding(),
+          _buildGigsTab(),
           const ChatListScreen(),
           const NotificationsScreen(),
           const ProfileScreen(),
         ],
       ),
-      floatingActionButton: _currentIndex == 0
+      floatingActionButton: _currentIndex == 1
           ? FloatingActionButton.extended(
+              backgroundColor: AppColors.amber600,
+              foregroundColor: Colors.white,
               onPressed: () async {
                 if (!authProvider.isAuthenticated) {
                   final loggedIn = await Navigator.push<bool>(
@@ -148,164 +102,535 @@ class _HomeScreenState extends State<HomeScreen> {
               label: const Text('Post Gig'),
             )
           : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.work_outline),
-            selectedIcon: Icon(Icons.work),
-            label: 'Gigs',
+      bottomNavigationBar: _buildBottomNav(notifProvider),
+    );
+  }
+
+  // ============ DRAWER ============
+
+  Widget _buildDrawer(BuildContext context, AuthProvider authProvider) {
+    return Drawer(
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.amber50, Colors.white],
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
-            label: 'Messages',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: notifProvider.unreadCount > 0,
-              label: Text('${notifProvider.unreadCount}'),
-              child: const Icon(Icons.notifications_outlined),
+        ),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.amber600, AppColors.amber900],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.2),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: Center(
+                      child: Text(
+                        authProvider.isAuthenticated
+                            ? (authProvider.user?.firstName?.isNotEmpty == true
+                                ? authProvider.user!.firstName[0].toUpperCase()
+                                : 'A')
+                            : 'A',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    authProvider.isAuthenticated
+                        ? authProvider.user?.fullName ?? 'User'
+                        : 'Welcome to Akwaaba',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (authProvider.isAuthenticated)
+                    Text(
+                      authProvider.user?.email ?? '',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
             ),
-            selectedIcon: Badge(
-              isLabelVisible: notifProvider.unreadCount > 0,
-              label: Text('${notifProvider.unreadCount}'),
-              child: const Icon(Icons.notifications),
-            ),
-            label: 'Alerts',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
+            if (authProvider.isAuthenticated) ...[
+              _drawerItem(
+                icon: Icons.bookmark_outline,
+                label: 'Saved Gigs',
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SavedGigsScreen()),
+                  );
+                },
+              ),
+              _drawerItem(
+                icon: Icons.work_history_outlined,
+                label: 'My Posted Gigs',
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const MyGigsScreen()),
+                  );
+                },
+              ),
+              _drawerItem(
+                icon: Icons.assignment_outlined,
+                label: 'My Applications',
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const MyApplicationsScreen()),
+                  );
+                },
+              ),
+              const Divider(color: AppColors.gray200),
+              _drawerItem(
+                icon: Icons.logout,
+                label: 'Logout',
+                color: AppColors.red600,
+                onTap: () {
+                  Navigator.pop(context);
+                  authProvider.logout();
+                },
+              ),
+            ] else ...[
+              _drawerItem(
+                icon: Icons.login,
+                label: 'Login / Register',
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildJobsTab() {
-    return Consumer<JobsProvider>(
-      builder: (context, jobsProvider, child) {
-        return RefreshIndicator(
-          onRefresh: () => jobsProvider.loadJobs(),
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search gigs...',
-                          prefixIcon: const Icon(Icons.search),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: Theme.of(context).colorScheme.surface,
-                        ),
-                        onChanged: (value) {
-                          jobsProvider.setSearchQuery(value);
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _buildFilters(jobsProvider),
-                    ],
-                  ),
-                ),
+  Widget _drawerItem({
+    required IconData icon,
+    required String label,
+    Color? color,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: color ?? AppColors.gray700),
+      title: Text(
+        label,
+        style: TextStyle(color: color ?? AppColors.gray800),
+      ),
+      onTap: onTap,
+    );
+  }
+
+  // ============ BOTTOM NAVIGATION ============
+
+  Widget _buildBottomNav(NotificationsProvider notifProvider) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(
+                icon: Icons.home_outlined,
+                activeIcon: Icons.home,
+                label: 'Home',
+                index: 0,
               ),
-              if (jobsProvider.isLoading)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (jobsProvider.error != null)
-                SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Failed to load gigs',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton(
-                          onPressed: () => jobsProvider.loadJobs(),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else if (jobsProvider.jobs.isEmpty)
-                SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.work_off_outlined,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No gigs found',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Try adjusting your filters',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                color:
-                                    Theme.of(context).colorScheme.outline,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final job = jobsProvider.jobs[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: JobCard(
-                            job: job,
-                            onTap: () => _navigateToJobDetails(job),
-                          ),
-                        );
-                      },
-                      childCount: jobsProvider.jobs.length,
-                    ),
-                  ),
-                ),
+              _buildNavItem(
+                icon: Icons.work_outline,
+                activeIcon: Icons.work,
+                label: 'Gigs',
+                index: 1,
+              ),
+              _buildNavItem(
+                icon: Icons.chat_bubble_outline,
+                activeIcon: Icons.chat_bubble,
+                label: 'Messages',
+                index: 2,
+              ),
+              _buildNavItem(
+                icon: Icons.notifications_outlined,
+                activeIcon: Icons.notifications,
+                label: 'Alerts',
+                index: 3,
+                badgeCount: notifProvider.unreadCount,
+              ),
+              _buildNavItem(
+                icon: Icons.person_outline,
+                activeIcon: Icons.person,
+                label: 'Profile',
+                index: 4,
+              ),
             ],
           ),
-        );
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required IconData icon,
+    required IconData activeIcon,
+    required String label,
+    required int index,
+    int badgeCount = 0,
+  }) {
+    final isActive = _currentIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _currentIndex = index;
+        });
       },
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 64,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? AppColors.amber500.withOpacity(0.15)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    isActive ? activeIcon : icon,
+                    color: isActive ? AppColors.amber700 : AppColors.gray500,
+                    size: 24,
+                  ),
+                ),
+                if (badgeCount > 0)
+                  Positioned(
+                    right: 4,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AppColors.red500,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '$badgeCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                color: isActive ? AppColors.amber700 : AppColors.gray500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============ HOME LANDING TAB ============
+
+  Widget _buildHomeLanding() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: AppColors.backgroundGradient,
+      ),
+      child: SafeArea(
+        child: RefreshIndicator(
+          color: AppColors.amber600,
+          onRefresh: () => context.read<JobsProvider>().loadJobs(),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                HeaderWidget(
+                  onMenuTap: () {
+                    _scaffoldKey.currentState?.openDrawer();
+                  },
+                ),
+
+                // Search Bar
+                SearchBarWidget(
+                  onTap: _switchToGigsTab,
+                ),
+
+                // Ad Carousel
+                const AdCarouselWidget(),
+
+                // Services Grid
+                ServicesGridWidget(
+                  onGigsTap: _switchToGigsTab,
+                  onStoreTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Akwaaba Store coming soon!'),
+                        backgroundColor: AppColors.amber600,
+                      ),
+                    );
+                  },
+                ),
+
+                // Quick Stats
+                const QuickStatsWidget(),
+
+                // Popular Gigs
+                PopularGigsWidget(
+                  onSeeAllTap: _switchToGigsTab,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============ GIGS TAB (Browse) ============
+
+  Widget _buildGigsTab() {
+    return Container(
+      color: AppColors.gray100,
+      child: Consumer<JobsProvider>(
+        builder: (context, jobsProvider, child) {
+          return RefreshIndicator(
+            color: AppColors.amber600,
+            onRefresh: () => jobsProvider.loadJobs(),
+            child: CustomScrollView(
+              slivers: [
+                // Custom App Bar
+                SliverAppBar(
+                  floating: true,
+                  snap: true,
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.gray900,
+                  elevation: 0,
+                  title: const Text(
+                    'Browse Gigs',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.amber900,
+                    ),
+                  ),
+                  actions: [
+                    if (context.watch<AuthProvider>().isAuthenticated)
+                      IconButton(
+                        icon: const Icon(Icons.bookmark_border,
+                            color: AppColors.amber600),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const SavedGigsScreen()),
+                        ),
+                        tooltip: 'Saved Gigs',
+                      ),
+                  ],
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Search
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.amber400.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: const InputDecoration(
+                              hintText: 'Search gigs...',
+                              hintStyle: TextStyle(color: AppColors.gray400),
+                              prefixIcon: Icon(Icons.search,
+                                  color: AppColors.amber600),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            onChanged: (value) {
+                              jobsProvider.setSearchQuery(value);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildFilters(jobsProvider),
+                      ],
+                    ),
+                  ),
+                ),
+                if (jobsProvider.isLoading)
+                  const SliverFillRemaining(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.amber600,
+                      ),
+                    ),
+                  )
+                else if (jobsProvider.error != null)
+                  SliverFillRemaining(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            size: 64,
+                            color: AppColors.red500,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Failed to load gigs',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.gray800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          FilledButton(
+                            onPressed: () => jobsProvider.loadJobs(),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.amber600,
+                            ),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (jobsProvider.jobs.isEmpty)
+                  SliverFillRemaining(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.work_off_outlined,
+                            size: 64,
+                            color: AppColors.gray400,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No gigs found',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.gray800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Try adjusting your filters',
+                            style: TextStyle(
+                              color: AppColors.gray500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final job = jobsProvider.jobs[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: JobCard(
+                              job: job,
+                              onTap: () => _navigateToJobDetails(job),
+                            ),
+                          );
+                        },
+                        childCount: jobsProvider.jobs.length,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -314,29 +639,92 @@ class _HomeScreenState extends State<HomeScreen> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          FilterChip(
-            label: Text(jobsProvider.selectedCategory ?? 'Category'),
-            selected: jobsProvider.selectedCategory != null,
-            onSelected: (_) => _showCategoryPicker(jobsProvider),
+          _buildFilterChip(
+            label: jobsProvider.selectedCategory ?? 'Category',
+            isSelected: jobsProvider.selectedCategory != null,
+            onTap: () => _showCategoryPicker(jobsProvider),
           ),
           const SizedBox(width: 8),
-          FilterChip(
-            label: Text(jobsProvider.selectedLocation ?? 'Location'),
-            selected: jobsProvider.selectedLocation != null,
-            onSelected: (_) => _showLocationPicker(jobsProvider),
+          _buildFilterChip(
+            label: jobsProvider.selectedLocation ?? 'Location',
+            isSelected: jobsProvider.selectedLocation != null,
+            onTap: () => _showLocationPicker(jobsProvider),
           ),
           const SizedBox(width: 8),
           if (jobsProvider.selectedCategory != null ||
               jobsProvider.selectedLocation != null ||
               jobsProvider.searchQuery.isNotEmpty)
-            ActionChip(
-              label: const Text('Clear'),
-              onPressed: () {
+            GestureDetector(
+              onTap: () {
                 jobsProvider.clearFilters();
                 _searchController.clear();
               },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.red50,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.red500.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.clear, size: 14, color: AppColors.red600),
+                    SizedBox(width: 4),
+                    Text(
+                      'Clear',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.red600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.amber500.withOpacity(0.15) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppColors.amber500 : AppColors.gray200,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: isSelected ? AppColors.amber700 : AppColors.gray600,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 16,
+              color: isSelected ? AppColors.amber700 : AppColors.gray500,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -344,29 +732,57 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showCategoryPicker(JobsProvider jobsProvider) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.gray200,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               ListTile(
-                title: const Text('All Categories'),
+                title: const Text(
+                  'All Categories',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 onTap: () {
                   jobsProvider.setCategory(null);
                   Navigator.pop(context);
                 },
               ),
-              const Divider(),
+              const Divider(height: 1),
               Flexible(
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: JobsProvider.categories.length,
                   itemBuilder: (context, index) {
                     final category = JobsProvider.categories[index];
+                    final isSelected =
+                        jobsProvider.selectedCategory == category;
                     return ListTile(
-                      title: Text(category),
-                      trailing: jobsProvider.selectedCategory == category
-                          ? const Icon(Icons.check)
+                      title: Text(
+                        category,
+                        style: TextStyle(
+                          color: isSelected
+                              ? AppColors.amber700
+                              : AppColors.gray800,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: isSelected
+                          ? const Icon(Icons.check, color: AppColors.amber600)
                           : null,
                       onTap: () {
                         jobsProvider.setCategory(category);
@@ -386,29 +802,57 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showLocationPicker(JobsProvider jobsProvider) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.gray200,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               ListTile(
-                title: const Text('All Locations'),
+                title: const Text(
+                  'All Locations',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 onTap: () {
                   jobsProvider.setLocation(null);
                   Navigator.pop(context);
                 },
               ),
-              const Divider(),
+              const Divider(height: 1),
               Flexible(
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: JobsProvider.ghanaRegions.length,
                   itemBuilder: (context, index) {
                     final region = JobsProvider.ghanaRegions[index];
+                    final isSelected =
+                        jobsProvider.selectedLocation == region;
                     return ListTile(
-                      title: Text(region),
-                      trailing: jobsProvider.selectedLocation == region
-                          ? const Icon(Icons.check)
+                      title: Text(
+                        region,
+                        style: TextStyle(
+                          color: isSelected
+                              ? AppColors.amber700
+                              : AppColors.gray800,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: isSelected
+                          ? const Icon(Icons.check, color: AppColors.amber600)
                           : null,
                       onTap: () {
                         jobsProvider.setLocation(region);
