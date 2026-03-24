@@ -253,20 +253,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildProfileRow(context, Icons.location_on, seeker.location),
             if (seeker.skills != null && seeker.skills!.isNotEmpty)
               _buildProfileRow(context, Icons.build, seeker.skills!),
-            if (seeker.canChat)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.chat, size: 16, color: Colors.green),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Chat enabled',
-                      style: TextStyle(color: Colors.green),
-                    ),
-                  ],
-                ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.chat, size: 16, color: Colors.green),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Chat enabled',
+                    style: TextStyle(color: Colors.green),
+                  ),
+                ],
               ),
+            ),
             if (seeker.rejectionReason != null) ...[
               const SizedBox(height: 8),
               Container(

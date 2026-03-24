@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../models/job.dart';
 import '../models/application.dart';
 import '../services/api_service.dart';
+import 'chat_screen.dart';
 import 'rate_seeker_screen.dart';
 
 class JobApplicationsScreen extends StatefulWidget {
@@ -211,8 +212,17 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _messageApplicant(app),
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text('Message Applicant'),
+              ),
+            ),
             if (app.isApproved && widget.job.status == 'completed') ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -251,6 +261,40 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _messageApplicant(Application app) async {
+    try {
+      final conversation = await ApiService.createConversation(
+        jobId: widget.job.id,
+        posterId: widget.job.posterId,
+        posterName: widget.job.postedBy,
+        seekerEmail: app.email,
+        seekerName: app.fullName,
+      );
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(
+              conversationId: conversation.id,
+              otherPartyName: app.fullName,
+              jobTitle: widget.job.title,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 
   String _formatDocType(String type) {

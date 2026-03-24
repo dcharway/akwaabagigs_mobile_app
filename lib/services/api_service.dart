@@ -442,7 +442,7 @@ class ApiService {
       ..set('phone', phone)
       ..set('location', location)
       ..set('verificationStatus', 'unverified')
-      ..set('canChat', false);
+      ..set('canChat', true);
 
     final response = await seeker.save();
     if (response.success && response.result != null) {
