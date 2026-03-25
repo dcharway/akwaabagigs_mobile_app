@@ -289,6 +289,36 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       if (loggedIn != true || !context.mounted) return;
     }
 
+    // Check if user is the poster (posters can always chat)
+    final currentUserId = context.read<AuthProvider>().user?.id;
+    final isPoster = currentUserId == widget.job.posterId;
+
+    // If seeker, check admin-controlled canChat status
+    if (!isPoster) {
+      try {
+        final seekerProfile = await ApiService.getGigSeekerProfile();
+        if (seekerProfile == null) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    'Please create a Gig Seeker profile first to chat with posters.'),
+              ),
+            );
+          }
+          return;
+        }
+        if (!seekerProfile.canChat) {
+          if (context.mounted) {
+            _showChatDisabledDialog(context);
+          }
+          return;
+        }
+      } catch (e) {
+        // If profile check fails, allow the attempt and let server decide
+      }
+    }
+
     try {
       final conversation = await ApiService.createConversation(
         jobId: widget.job.id,
@@ -319,6 +349,26 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         );
       }
     }
+  }
+
+  void _showChatDisabledDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Chat Not Available'),
+        content: const Text(
+          'Your chat access has not been enabled yet. '
+          'An admin needs to verify your account before you can chat with gig posters.\n\n'
+          'Please ensure your profile is complete and wait for admin verification.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _applyForJob(BuildContext context) async {
