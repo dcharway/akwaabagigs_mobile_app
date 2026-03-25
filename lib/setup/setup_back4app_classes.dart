@@ -142,7 +142,7 @@ Future<void> main() async {
     'idDocumentUrl': '_seed_',
     'verificationStatus': 'unverified',
     'rejectionReason': '_seed_',
-    'canChat': true,
+    'canChat': false,
     'profilePictureUrl': '_seed_',
   });
 
