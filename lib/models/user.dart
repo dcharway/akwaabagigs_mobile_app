@@ -4,6 +4,7 @@ class User {
   final String firstName;
   final String lastName;
   final String? profileImageUrl;
+  final bool isAdmin;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -13,6 +14,7 @@ class User {
     required this.firstName,
     required this.lastName,
     this.profileImageUrl,
+    this.isAdmin = false,
     this.createdAt,
     this.updatedAt,
   });
@@ -26,6 +28,7 @@ class User {
       firstName: json['firstName'] ?? '',
       lastName: json['lastName'] ?? '',
       profileImageUrl: json['profileImageUrl'],
+      isAdmin: json['isAdmin'] ?? false,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'])
           : null,
@@ -42,6 +45,7 @@ class User {
       'firstName': firstName,
       'lastName': lastName,
       'profileImageUrl': profileImageUrl,
+      'isAdmin': isAdmin,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };

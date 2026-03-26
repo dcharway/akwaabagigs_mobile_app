@@ -1143,6 +1143,243 @@ class ApiService {
     }
   }
 
+  // ============ STORE (Products & Orders) ============
+
+  static Future<bool> isCurrentUserAdmin() async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) return false;
+    return user.get<bool>('isAdmin') ?? false;
+  }
+
+  static Future<List<Map<String, dynamic>>> getProducts({
+    String? category,
+    bool activeOnly = true,
+  }) async {
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.productClass))
+      ..orderByDescending('createdAt');
+
+    if (activeOnly) {
+      query.whereEqualTo('status', 'active');
+    }
+    if (category != null) {
+      query.whereEqualTo('category', category);
+    }
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => _parseObjectToProductMap(e as ParseObject))
+          .toList();
+    }
+    return [];
+  }
+
+  static Future<Map<String, dynamic>?> getProduct(String id) async {
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.productClass))
+      ..whereEqualTo('objectId', id);
+
+    final response = await query.query();
+    if (response.success &&
+        response.results != null &&
+        response.results!.isNotEmpty) {
+      return _parseObjectToProductMap(
+          response.results!.first as ParseObject);
+    }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>> createProduct({
+    required String name,
+    required String description,
+    required int pricePesewas,
+    required int stock,
+    required String category,
+    List<String>? imageUrls,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final product = ParseObject(Back4AppConfig.productClass)
+      ..set('name', name)
+      ..set('description', description)
+      ..set('pricePesewas', pricePesewas)
+      ..set('stock', stock)
+      ..set('category', category)
+      ..set('status', 'active')
+      ..set('sellerId', user.objectId)
+      ..set('sellerName',
+          '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'.trim());
+
+    if (imageUrls != null && imageUrls.isNotEmpty) {
+      product.set('images', imageUrls);
+    }
+
+    final response = await product.save();
+    if (response.success && response.result != null) {
+      return _parseObjectToProductMap(response.result as ParseObject);
+    }
+    throw Exception(
+        'Failed to create product: ${response.error?.message}');
+  }
+
+  static Future<void> updateProduct(
+      String id, Map<String, dynamic> updates) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final product = ParseObject(Back4AppConfig.productClass)
+      ..objectId = id;
+    updates.forEach((key, value) => product.set(key, value));
+
+    final response = await product.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to update product: ${response.error?.message}');
+    }
+  }
+
+  static Future<void> deleteProduct(String id) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final product = ParseObject(Back4AppConfig.productClass)
+      ..objectId = id;
+    final response = await product.delete();
+    if (!response.success) {
+      throw Exception(
+          'Failed to delete product: ${response.error?.message}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createStoreOrder({
+    required String productId,
+    required String productName,
+    required int pricePesewas,
+    required int quantity,
+    required String paymentMethod,
+    required String buyerName,
+    required String buyerPhone,
+    required String buyerEmail,
+    String? deliveryAddress,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final totalPesewas = pricePesewas * quantity;
+    final commissionPesewas = (totalPesewas * 0.04).round(); // 4% commission
+
+    final order = ParseObject(Back4AppConfig.orderClass)
+      ..set('productId', productId)
+      ..set('productName', productName)
+      ..set('buyerId', user.objectId)
+      ..set('buyerName', buyerName)
+      ..set('buyerPhone', buyerPhone)
+      ..set('buyerEmail', buyerEmail)
+      ..set('quantity', quantity)
+      ..set('pricePesewas', pricePesewas)
+      ..set('totalPesewas', totalPesewas)
+      ..set('commissionPesewas', commissionPesewas)
+      ..set('paymentMethod', paymentMethod)
+      ..set('status', 'paid')
+      ..set('paidAt', DateTime.now().toIso8601String());
+
+    if (deliveryAddress != null) {
+      order.set('deliveryAddress', deliveryAddress);
+    }
+
+    final response = await order.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to create order: ${response.error?.message}');
+    }
+
+    // Decrement stock
+    final product = ParseObject(Back4AppConfig.productClass)
+      ..objectId = productId;
+    product.setDecrement('stock', quantity);
+    await product.save();
+
+    // Record payment
+    await recordPayment(
+      jobId: 'store_$productId',
+      amount: (totalPesewas / 100).round(),
+      currency: 'GHS',
+      paymentMethod: paymentMethod,
+      paymentTier: 'store_purchase',
+      duration: 'one-time',
+      phone: buyerPhone,
+    );
+
+    return {
+      'orderId': response.result?.objectId ?? '',
+      'total': totalPesewas,
+      'commission': commissionPesewas,
+    };
+  }
+
+  static Future<List<Map<String, dynamic>>> getOrders({
+    bool adminView = false,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.orderClass))
+      ..orderByDescending('createdAt');
+
+    if (!adminView) {
+      query.whereEqualTo('buyerId', user.objectId);
+    }
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!.map((e) {
+        final obj = e as ParseObject;
+        return {
+          'id': obj.objectId ?? '',
+          'productId': obj.get<String>('productId') ?? '',
+          'productName': obj.get<String>('productName') ?? '',
+          'buyerName': obj.get<String>('buyerName') ?? '',
+          'buyerPhone': obj.get<String>('buyerPhone') ?? '',
+          'quantity': obj.get<int>('quantity') ?? 0,
+          'totalPesewas': obj.get<int>('totalPesewas') ?? 0,
+          'status': obj.get<String>('status') ?? 'pending',
+          'paidAt': obj.get<String>('paidAt'),
+          'deliveryAddress': obj.get<String>('deliveryAddress'),
+          'createdAt': obj.createdAt?.toIso8601String() ?? '',
+        };
+      }).toList();
+    }
+    return [];
+  }
+
+  static Map<String, dynamic> _parseObjectToProductMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'name': obj.get<String>('name') ?? '',
+      'description': obj.get<String>('description') ?? '',
+      'pricePesewas': obj.get<int>('pricePesewas') ?? 0,
+      'stock': obj.get<int>('stock') ?? 0,
+      'category': obj.get<String>('category') ?? '',
+      'status': obj.get<String>('status') ?? 'active',
+      'images': obj.get<List>('images')?.cast<String>() ?? [],
+      'sellerId': obj.get<String>('sellerId') ?? '',
+      'sellerName': obj.get<String>('sellerName') ?? '',
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+    };
+  }
+
   // ============ ADMIN CLOUD FUNCTIONS ============
   // These call Back4App Cloud Code functions for admin verification toggles.
   // Admins can also toggle directly in the Back4App dashboard.
@@ -1246,6 +1483,7 @@ class ApiService {
       'firstName': user.get<String>('firstName') ?? '',
       'lastName': user.get<String>('lastName') ?? '',
       'profileImageUrl': user.get<String>('profileImageUrl'),
+      'isAdmin': user.get<bool>('isAdmin') ?? false,
       'createdAt': user.createdAt?.toIso8601String(),
       'updatedAt': user.updatedAt?.toIso8601String(),
     };

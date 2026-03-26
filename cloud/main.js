@@ -186,3 +186,64 @@ Parse.Cloud.define('getVerificationStatus', async (request) => {
     createdAt: seeker.createdAt,
   };
 });
+
+// ============ STORE: ADMIN-ONLY PRODUCT ENFORCEMENT ============
+
+/**
+ * beforeSave trigger on Product: Only admins can create/update products.
+ */
+Parse.Cloud.beforeSave('Product', async (request) => {
+  if (request.master) return; // Allow master key operations
+
+  const user = request.user;
+  if (!user) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Authentication required');
+  }
+
+  // Fetch full user to check isAdmin
+  const userQuery = new Parse.Query(Parse.User);
+  const fullUser = await userQuery.get(user.id, { useMasterKey: true });
+
+  if (!fullUser.get('isAdmin')) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Admin access required to manage products');
+  }
+});
+
+/**
+ * beforeDelete trigger on Product: Only admins can delete products.
+ */
+Parse.Cloud.beforeDelete('Product', async (request) => {
+  if (request.master) return;
+
+  const user = request.user;
+  if (!user) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Authentication required');
+  }
+
+  const userQuery = new Parse.Query(Parse.User);
+  const fullUser = await userQuery.get(user.id, { useMasterKey: true });
+
+  if (!fullUser.get('isAdmin')) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Admin access required to delete products');
+  }
+});
+
+/**
+ * afterSave on StoreOrder: Auto-decrement product stock and record commission.
+ */
+Parse.Cloud.afterSave('StoreOrder', async (request) => {
+  const order = request.object;
+
+  // Only process new orders
+  if (order.existed()) return;
+
+  const productId = order.get('productId');
+  const quantity = order.get('quantity') || 1;
+
+  if (productId) {
+    const productQuery = new Parse.Query('Product');
+    const product = await productQuery.get(productId, { useMasterKey: true });
+    product.decrement('stock', quantity);
+    await product.save(null, { useMasterKey: true });
+  }
+});

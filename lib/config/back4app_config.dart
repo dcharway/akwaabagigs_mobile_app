@@ -17,4 +17,6 @@ class Back4AppConfig {
   static const String paymentClass = 'Payment';
   static const String escrowClass = 'Escrow';
   static const String subscriptionClass = 'Subscription';
+  static const String productClass = 'Product';
+  static const String orderClass = 'StoreOrder';
 }
