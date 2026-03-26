@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/conversation.dart';
+import '../models/gig_seeker.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/colors.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -28,18 +31,69 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Message> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
+  bool _canChat = true;
+  bool _isCheckingChatAccess = true;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
+    _checkChatAccess();
+    // Poll for new messages every 10 seconds for async experience
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _refreshMessages();
+    });
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkChatAccess() async {
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final currentUserId = authProvider.user?.id;
+
+      // Check if the user is a poster for this conversation
+      // Posters always have chat access
+      final conversations = await ApiService.getConversations();
+      final conversation = conversations
+          .where((c) => c.id == widget.conversationId)
+          .firstOrNull;
+
+      if (conversation != null && currentUserId == conversation.posterId) {
+        // User is the poster - always allowed
+        if (mounted) {
+          setState(() {
+            _canChat = true;
+            _isCheckingChatAccess = false;
+          });
+        }
+        return;
+      }
+
+      // User is a seeker - check admin-controlled canChat field
+      final seekerProfile = await ApiService.getGigSeekerProfile();
+      if (mounted) {
+        setState(() {
+          _canChat = seekerProfile?.canChat ?? false;
+          _isCheckingChatAccess = false;
+        });
+      }
+    } catch (e) {
+      // On error, allow chat (don't block on network issues)
+      if (mounted) {
+        setState(() {
+          _canChat = true;
+          _isCheckingChatAccess = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadMessages() async {
@@ -60,6 +114,29 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (mounted) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  /// Silently refresh messages without showing loading indicator
+  Future<void> _refreshMessages() async {
+    try {
+      final newMessages =
+          await ApiService.getMessages(widget.conversationId);
+      if (mounted && newMessages.length != _messages.length) {
+        final wasAtBottom = _scrollController.hasClients &&
+            _scrollController.position.pixels >=
+                _scrollController.position.maxScrollExtent - 50;
+        setState(() {
+          _messages = newMessages;
+        });
+        if (wasAtBottom) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom();
+          });
+        }
+      }
+    } catch (_) {
+      // Silent refresh - don't show errors
     }
   }
 
@@ -175,6 +252,13 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadMessages,
+            tooltip: 'Refresh messages',
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -201,7 +285,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Start the conversation!',
+                              _canChat
+                                  ? 'Start the conversation!'
+                                  : 'Waiting for admin to enable chat access.',
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
@@ -210,6 +296,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         .colorScheme
                                         .outline,
                                   ),
+                              textAlign: TextAlign.center,
                             ),
                           ],
                         ),
@@ -227,56 +314,88 @@ class _ChatScreenState extends State<ChatScreen> {
                         },
                       ),
           ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              border: Border(
-                top: BorderSide(
-                  color:
-                      Theme.of(context).colorScheme.outlineVariant,
+          // Chat input or disabled banner
+          if (!_isCheckingChatAccess && !_canChat)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.amber50,
+                border: Border(
+                  top: BorderSide(
+                    color: AppColors.amber400.withOpacity(0.5),
+                  ),
+                ),
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline,
+                        size: 20, color: AppColors.amber700),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Chat disabled. An admin must verify your account to enable messaging.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.amber900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color:
+                        Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: InputDecoration(
+                          hintText: 'Type a message...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        maxLines: null,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: _isSending ? null : _sendMessage,
+                      icon: _isSending
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.send),
+                    ),
+                  ],
                 ),
               ),
             ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      decoration: InputDecoration(
-                        hintText: 'Type a message...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      maxLines: null,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _isSending ? null : _sendMessage,
-                    icon: _isSending
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.send),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );

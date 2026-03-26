@@ -255,15 +255,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildProfileRow(context, Icons.build, seeker.skills!),
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.chat, size: 16, color: Colors.green),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Chat enabled',
-                    style: TextStyle(color: Colors.green),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: seeker.canChat
+                      ? Colors.green.shade50
+                      : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: seeker.canChat
+                        ? Colors.green.shade200
+                        : Colors.orange.shade200,
                   ),
-                ],
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      seeker.canChat
+                          ? Icons.chat
+                          : Icons.chat_bubble_outline,
+                      size: 16,
+                      color: seeker.canChat
+                          ? Colors.green.shade700
+                          : Colors.orange.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            seeker.canChat
+                                ? 'Chat enabled'
+                                : 'Chat disabled',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: seeker.canChat
+                                  ? Colors.green.shade700
+                                  : Colors.orange.shade700,
+                            ),
+                          ),
+                          if (!seeker.canChat)
+                            Text(
+                              'An admin must verify your account to enable chat.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.orange.shade600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             if (seeker.rejectionReason != null) ...[

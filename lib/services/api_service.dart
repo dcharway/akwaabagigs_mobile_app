@@ -484,7 +484,7 @@ class ApiService {
       ..set('phone', phone)
       ..set('location', location)
       ..set('verificationStatus', 'unverified')
-      ..set('canChat', true);
+      ..set('canChat', false);
 
     final response = await seeker.save();
     if (response.success && response.result != null) {
@@ -751,6 +751,88 @@ class ApiService {
     return response.success &&
         response.results != null &&
         response.results!.isNotEmpty;
+  }
+
+  // ============ PAYMENTS ============
+
+  static Future<void> recordPayment({
+    required String jobId,
+    required int amount,
+    required String currency,
+    required String paymentMethod,
+    required String paymentTier,
+    required String duration,
+    String? phone,
+    String? reference,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final payment = ParseObject(Back4AppConfig.paymentClass)
+      ..set('jobId', jobId)
+      ..set('userId', user.objectId)
+      ..set('amount', amount)
+      ..set('currency', currency)
+      ..set('paymentMethod', paymentMethod)
+      ..set('paymentTier', paymentTier)
+      ..set('duration', duration)
+      ..set('status', 'completed')
+      ..set('paidAt', DateTime.now().toIso8601String());
+
+    if (phone != null && phone.isNotEmpty) {
+      payment.set('phone', phone);
+    }
+    if (reference != null && reference.isNotEmpty) {
+      payment.set('reference', reference);
+    }
+
+    final response = await payment.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to record payment: ${response.error?.message}');
+    }
+  }
+
+  // ============ ADMIN CLOUD FUNCTIONS ============
+  // These call Back4App Cloud Code functions for admin verification toggles.
+  // Admins can also toggle directly in the Back4App dashboard.
+
+  static Future<Map<String, dynamic>> verifyUser(String seekerId) async {
+    final response = await ParseCloudFunction('verifyUser').execute(
+      parameters: {'seekerId': seekerId},
+    );
+    if (response.success && response.result != null) {
+      return Map<String, dynamic>.from(response.result);
+    }
+    throw Exception(
+        'Failed to verify user: ${response.error?.message}');
+  }
+
+  static Future<Map<String, dynamic>> unverifyUser(
+      String seekerId, {String? reason}) async {
+    final params = <String, dynamic>{'seekerId': seekerId};
+    if (reason != null) params['reason'] = reason;
+
+    final response = await ParseCloudFunction('unverifyUser').execute(
+      parameters: params,
+    );
+    if (response.success && response.result != null) {
+      return Map<String, dynamic>.from(response.result);
+    }
+    throw Exception(
+        'Failed to unverify user: ${response.error?.message}');
+  }
+
+  static Future<Map<String, dynamic>> toggleUserChat(
+      String seekerId, bool canChat) async {
+    final response = await ParseCloudFunction('toggleUserChat').execute(
+      parameters: {'seekerId': seekerId, 'canChat': canChat},
+    );
+    if (response.success && response.result != null) {
+      return Map<String, dynamic>.from(response.result);
+    }
+    throw Exception(
+        'Failed to toggle chat: ${response.error?.message}');
   }
 
   // ============ AUTH TOKEN MANAGEMENT ============
