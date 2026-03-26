@@ -753,6 +753,223 @@ class ApiService {
         response.results!.isNotEmpty;
   }
 
+  // ============ FEATURED / URGENT GIGS ============
+
+  static Future<void> boostGig({
+    required String jobId,
+    required String boostType, // 'featured' or 'urgent'
+    required int durationHours,
+    required int cost,
+    required String paymentMethod,
+    String? phone,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final updates = <String, dynamic>{};
+    if (boostType == 'featured') {
+      updates['isFeatured'] = true;
+      updates['featuredUntil'] =
+          DateTime.now().add(Duration(hours: durationHours)).toIso8601String();
+    } else if (boostType == 'urgent') {
+      updates['isUrgent'] = true;
+    }
+
+    final job = ParseObject(Back4AppConfig.jobClass)..objectId = jobId;
+    updates.forEach((key, value) => job.set(key, value));
+    final response = await job.save();
+    if (!response.success) {
+      throw Exception('Failed to boost gig: ${response.error?.message}');
+    }
+
+    // Record the boost payment
+    await recordPayment(
+      jobId: jobId,
+      amount: cost,
+      currency: 'GHS',
+      paymentMethod: paymentMethod,
+      paymentTier: boostType,
+      duration: '${durationHours}h',
+      phone: phone,
+    );
+  }
+
+  // ============ ESCROW ============
+
+  static Future<void> fundEscrow({
+    required String jobId,
+    required int amount,
+    required String paymentMethod,
+    String? phone,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    // Create escrow record
+    final escrow = ParseObject(Back4AppConfig.escrowClass)
+      ..set('jobId', jobId)
+      ..set('funderId', user.objectId)
+      ..set('amount', amount)
+      ..set('currency', 'GHS')
+      ..set('status', 'funded')
+      ..set('paymentMethod', paymentMethod)
+      ..set('fundedAt', DateTime.now().toIso8601String());
+
+    if (phone != null && phone.isNotEmpty) {
+      escrow.set('phone', phone);
+    }
+
+    final escrowResponse = await escrow.save();
+    if (!escrowResponse.success) {
+      throw Exception(
+          'Failed to fund escrow: ${escrowResponse.error?.message}');
+    }
+
+    // Update job escrow status
+    final job = ParseObject(Back4AppConfig.jobClass)
+      ..objectId = jobId
+      ..set('escrowStatus', 'funded')
+      ..set('escrowAmount', amount);
+    await job.save();
+  }
+
+  static Future<void> releaseEscrow({
+    required String jobId,
+    required String workerEmail,
+    required int serviceFeePercent,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    // Find the escrow record
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.escrowClass))
+      ..whereEqualTo('jobId', jobId)
+      ..whereEqualTo('status', 'funded');
+
+    final response = await query.query();
+    if (!response.success ||
+        response.results == null ||
+        response.results!.isEmpty) {
+      throw Exception('No funded escrow found for this job');
+    }
+
+    final escrow = response.results!.first as ParseObject;
+    final amount = escrow.get<int>('amount') ?? 0;
+    final serviceFee = (amount * serviceFeePercent / 100).round();
+    final workerPayout = amount - serviceFee;
+
+    escrow
+      ..set('status', 'released')
+      ..set('workerEmail', workerEmail)
+      ..set('serviceFee', serviceFee)
+      ..set('workerPayout', workerPayout)
+      ..set('releasedAt', DateTime.now().toIso8601String());
+
+    final saveResponse = await escrow.save();
+    if (!saveResponse.success) {
+      throw Exception(
+          'Failed to release escrow: ${saveResponse.error?.message}');
+    }
+
+    // Update job escrow status
+    final job = ParseObject(Back4AppConfig.jobClass)
+      ..objectId = jobId
+      ..set('escrowStatus', 'released');
+    await job.save();
+  }
+
+  // ============ SUBSCRIPTIONS ============
+
+  static Future<Map<String, dynamic>?> getActiveSubscription() async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) return null;
+
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.subscriptionClass))
+      ..whereEqualTo('userId', user.objectId)
+      ..whereGreaterThan('expiresAt', DateTime.now().toIso8601String())
+      ..orderByDescending('createdAt')
+      ..setLimit(1);
+
+    final response = await query.query();
+    if (response.success &&
+        response.results != null &&
+        response.results!.isNotEmpty) {
+      final sub = response.results!.first as ParseObject;
+      return {
+        'id': sub.objectId,
+        'tier': sub.get<String>('tier') ?? 'free',
+        'expiresAt': sub.get<String>('expiresAt'),
+        'bidsRemaining': sub.get<int>('bidsRemaining') ?? 0,
+        'totalBids': sub.get<int>('totalBids') ?? 0,
+      };
+    }
+    return null;
+  }
+
+  static Future<void> purchaseSubscription({
+    required String tier, // 'verified_pro', 'bid_pack_10', 'bid_pack_25', 'bulk_poster'
+    required int amount,
+    required String paymentMethod,
+    required int durationDays,
+    int bids = 0,
+    String? phone,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final sub = ParseObject(Back4AppConfig.subscriptionClass)
+      ..set('userId', user.objectId)
+      ..set('userEmail', user.emailAddress)
+      ..set('tier', tier)
+      ..set('amount', amount)
+      ..set('currency', 'GHS')
+      ..set('paymentMethod', paymentMethod)
+      ..set('expiresAt',
+          DateTime.now().add(Duration(days: durationDays)).toIso8601String())
+      ..set('bidsRemaining', bids)
+      ..set('totalBids', bids)
+      ..set('status', 'active')
+      ..set('purchasedAt', DateTime.now().toIso8601String());
+
+    if (phone != null && phone.isNotEmpty) {
+      sub.set('phone', phone);
+    }
+
+    final response = await sub.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to purchase subscription: ${response.error?.message}');
+    }
+
+    // Record as payment too
+    await recordPayment(
+      jobId: 'subscription',
+      amount: amount,
+      currency: 'GHS',
+      paymentMethod: paymentMethod,
+      paymentTier: tier,
+      duration: '${durationDays}d',
+      phone: phone,
+    );
+  }
+
+  static Future<bool> useBid() async {
+    final sub = await getActiveSubscription();
+    if (sub == null) return true; // No subscription = free tier, allow
+
+    final bidsRemaining = sub['bidsRemaining'] as int? ?? 0;
+    if (bidsRemaining <= 0) return false;
+
+    // Decrement bids
+    final subObj = ParseObject(Back4AppConfig.subscriptionClass)
+      ..objectId = sub['id'] as String
+      ..set('bidsRemaining', bidsRemaining - 1);
+    await subObj.save();
+    return true;
+  }
+
   // ============ PAYMENTS ============
 
   static Future<void> recordPayment({
@@ -920,6 +1137,12 @@ class ApiService {
           '',
       'status': obj.get<String>('status') ?? 'active',
       'category': obj.get<String>('category'),
+      'isFeatured': obj.get<bool>('isFeatured') ?? false,
+      'isUrgent': obj.get<bool>('isUrgent') ?? false,
+      'featuredUntil': obj.get<String>('featuredUntil'),
+      'offerAmount': obj.get<int>('offerAmount'),
+      'escrowStatus': obj.get<String>('escrowStatus') ?? 'none',
+      'escrowAmount': obj.get<int>('escrowAmount') ?? 0,
     };
   }
 

@@ -4,10 +4,12 @@ import '../providers/auth_provider.dart';
 import '../models/gig_seeker.dart';
 import '../models/gig_poster.dart';
 import '../services/api_service.dart';
+import '../utils/colors.dart';
 import 'edit_seeker_profile_screen.dart';
 import 'edit_poster_profile_screen.dart';
 import 'verification_screen.dart';
 import 'seeker_ratings_screen.dart';
+import 'pro_subscription_screen.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -601,6 +603,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Card(
           child: Column(
             children: [
+              ListTile(
+                leading: const Icon(Icons.verified,
+                    color: AppColors.amber600),
+                title: const Text('Pro & Subscriptions'),
+                subtitle: const Text(
+                    'Verified Pro, Bid Packs, Bulk Poster'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          const ProSubscriptionScreen()),
+                ),
+              ),
+              const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.help_outline),
                 title: const Text('Help & Support'),
