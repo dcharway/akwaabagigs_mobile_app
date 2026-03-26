@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../models/job.dart';
 import '../models/application.dart';
 import '../services/api_service.dart';
+import '../utils/colors.dart';
 import 'chat_screen.dart';
 import 'rate_seeker_screen.dart';
 
@@ -19,10 +20,12 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
   List<Application> _applications = [];
   bool _isLoading = true;
   String? _error;
+  late Job _currentJob;
 
   @override
   void initState() {
     super.initState();
+    _currentJob = widget.job;
     _loadApplications();
   }
 
@@ -35,6 +38,9 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
     try {
       _applications =
           await ApiService.getApplications(jobId: widget.job.id);
+      // Refresh job data for current offerAmount
+      final refreshedJob = await ApiService.getJob(widget.job.id);
+      if (refreshedJob != null) _currentJob = refreshedJob;
     } catch (e) {
       _error = e.toString().replaceAll('Exception: ', '');
     }
@@ -56,6 +62,151 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
     }
   }
 
+  Future<void> _showEditAskingAmount() async {
+    final controller = TextEditingController(
+      text: _currentJob.offerAmount != null
+          ? (_currentJob.offerAmount! / 100).round().toString()
+          : '',
+    );
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Set Asking Amount'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Set or adjust the job amount (in GHS). '
+              'Bids must be in 50 or 100 GHS increments.',
+              style: TextStyle(fontSize: 13, color: AppColors.gray600),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Amount (GHS)',
+                prefixText: 'GH₵ ',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final ghs = int.tryParse(controller.text.trim());
+              if (ghs != null && ghs > 0) {
+                Navigator.pop(context, ghs * 100); // return pesewas
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      try {
+        await ApiService.updateJobAskingAmount(widget.job.id, result);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Asking amount set to GHS ${(result / 100).round()}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _loadApplications();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceAll('Exception: ', '')),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _approveBid(Application app) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Approve Bid'),
+        content: Text(
+          'Accept ${app.fullName}\'s bid of GH₵ ${app.bidAmountGhs?.toStringAsFixed(0) ?? "0"}?\n\n'
+          'This will approve the application and unlock chat with this seeker.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Approve'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ApiService.approveBid(app.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bid approved! Chat is now enabled.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _loadApplications();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceAll('Exception: ', '')),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _rejectBid(Application app) async {
+    try {
+      await ApiService.rejectBid(app.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bid rejected.')),
+        );
+        _loadApplications();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -63,6 +214,13 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
         title: Text('Applications for ${widget.job.title}'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_note),
+            tooltip: 'Edit Asking Amount',
+            onPressed: _showEditAskingAmount,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -94,18 +252,62 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
                               color: Theme.of(context).colorScheme.outline),
                           const SizedBox(height: 16),
                           Text('No applications yet',
-                              style: Theme.of(context).textTheme.titleMedium),
+                              style:
+                                  Theme.of(context).textTheme.titleMedium),
                         ],
                       ),
                     )
                   : RefreshIndicator(
                       onRefresh: _loadApplications,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _applications.length,
-                        itemBuilder: (context, index) {
-                          return _buildApplicationCard(_applications[index]);
-                        },
+                      child: Column(
+                        children: [
+                          // Asking amount banner
+                          if (_currentJob.offerAmount != null &&
+                              _currentJob.offerAmount! > 0)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              color: AppColors.amber50,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.attach_money,
+                                      size: 18,
+                                      color: AppColors.amber700),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Asking amount: GH₵ ${(_currentJob.offerAmount! / 100).round()}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.amber700,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  GestureDetector(
+                                    onTap: _showEditAskingAmount,
+                                    child: const Text(
+                                      'Edit',
+                                      style: TextStyle(
+                                        color: AppColors.amber600,
+                                        fontWeight: FontWeight.w600,
+                                        decoration:
+                                            TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _applications.length,
+                              itemBuilder: (context, index) {
+                                return _buildApplicationCard(
+                                    _applications[index]);
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
     );
@@ -152,9 +354,11 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
                       ),
                       Text(
                         app.email,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color:
+                                      Theme.of(context).colorScheme.outline,
+                                ),
                       ),
                     ],
                   ),
@@ -177,10 +381,102 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
                 ),
               ],
             ),
+
+            // Bid amount display
+            if (app.hasBid) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: app.isBidApproved
+                      ? AppColors.emerald500.withOpacity(0.08)
+                      : app.isBidRejected
+                          ? AppColors.red50
+                          : AppColors.amber50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: app.isBidApproved
+                        ? AppColors.emerald500.withOpacity(0.3)
+                        : app.isBidRejected
+                            ? AppColors.red500.withOpacity(0.3)
+                            : AppColors.amber400.withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      app.isBidApproved
+                          ? Icons.check_circle
+                          : app.isBidRejected
+                              ? Icons.cancel
+                              : Icons.gavel,
+                      size: 20,
+                      color: app.isBidApproved
+                          ? AppColors.emerald600
+                          : app.isBidRejected
+                              ? AppColors.red600
+                              : AppColors.amber700,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Bid: GH₵ ${app.bidAmountGhs!.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: app.isBidApproved
+                                  ? AppColors.emerald700
+                                  : app.isBidRejected
+                                      ? AppColors.red700
+                                      : AppColors.amber900,
+                            ),
+                          ),
+                          Text(
+                            app.isBidApproved
+                                ? 'Bid accepted — chat enabled'
+                                : app.isBidRejected
+                                    ? 'Bid rejected'
+                                    : 'Pending your review',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: app.isBidApproved
+                                  ? AppColors.emerald600
+                                  : app.isBidRejected
+                                      ? AppColors.red600
+                                      : AppColors.gray600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Approve/Reject buttons for pending bids
+                    if (app.isBidPending) ...[
+                      IconButton(
+                        onPressed: () => _approveBid(app),
+                        icon: const Icon(Icons.check_circle_outline),
+                        color: AppColors.emerald600,
+                        tooltip: 'Approve Bid',
+                      ),
+                      IconButton(
+                        onPressed: () => _rejectBid(app),
+                        icon: const Icon(Icons.cancel_outlined),
+                        color: AppColors.red600,
+                        tooltip: 'Reject Bid',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+
             const Divider(height: 24),
             _buildInfoRow(Icons.phone_outlined, app.phone),
             if (app.position != null)
-              _buildInfoRow(Icons.work_outline, 'Position: ${app.position}'),
+              _buildInfoRow(
+                  Icons.work_outline, 'Position: ${app.position}'),
             _buildInfoRow(Icons.calendar_today_outlined,
                 'Applied ${dateFormat.format(app.applicationDate)}'),
             if (app.idDocumentType != null)
@@ -212,16 +508,30 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
                 ),
               ),
             ],
+
+            // Action buttons
             const SizedBox(height: 12),
+            // Chat: only enabled if bid approved OR no bid placed
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => _messageApplicant(app),
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Message Applicant'),
+                onPressed: app.hasBid && !app.isBidApproved
+                    ? null // Disable chat until bid approved
+                    : () => _messageApplicant(app),
+                icon: Icon(
+                  app.hasBid && !app.isBidApproved
+                      ? Icons.lock_outline
+                      : Icons.chat_bubble_outline,
+                ),
+                label: Text(
+                  app.hasBid && !app.isBidApproved
+                      ? 'Approve bid to chat'
+                      : 'Message Applicant',
+                ),
               ),
             ),
-            if (app.isApproved && widget.job.status == 'completed') ...[
+            if (app.isApproved &&
+                widget.job.status == 'completed') ...[
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
@@ -256,7 +566,8 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
           Icon(icon, size: 16, color: Theme.of(context).colorScheme.outline),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
+            child:
+                Text(text, style: Theme.of(context).textTheme.bodyMedium),
           ),
         ],
       ),
