@@ -753,6 +753,59 @@ class ApiService {
         response.results!.isNotEmpty;
   }
 
+  // ============ BIDDING ============
+
+  static Future<void> submitBid({
+    required String applicationId,
+    required int amountPesewas,
+  }) async {
+    final app = ParseObject(Back4AppConfig.applicationClass)
+      ..objectId = applicationId
+      ..set('bidAmountPesewas', amountPesewas)
+      ..set('bidStatus', 'pending');
+
+    final response = await app.save();
+    if (!response.success) {
+      throw Exception('Failed to submit bid: ${response.error?.message}');
+    }
+  }
+
+  static Future<void> approveBid(String applicationId) async {
+    final app = ParseObject(Back4AppConfig.applicationClass)
+      ..objectId = applicationId
+      ..set('bidStatus', 'approved')
+      ..set('status', 'approved');
+
+    final response = await app.save();
+    if (!response.success) {
+      throw Exception('Failed to approve bid: ${response.error?.message}');
+    }
+  }
+
+  static Future<void> rejectBid(String applicationId) async {
+    final app = ParseObject(Back4AppConfig.applicationClass)
+      ..objectId = applicationId
+      ..set('bidStatus', 'rejected');
+
+    final response = await app.save();
+    if (!response.success) {
+      throw Exception('Failed to reject bid: ${response.error?.message}');
+    }
+  }
+
+  static Future<void> updateJobAskingAmount(
+      String jobId, int amountPesewas) async {
+    final job = ParseObject(Back4AppConfig.jobClass)
+      ..objectId = jobId
+      ..set('offerAmount', amountPesewas);
+
+    final response = await job.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to update asking amount: ${response.error?.message}');
+    }
+  }
+
   // ============ FEATURED / URGENT GIGS ============
 
   static Future<void> boostGig({
@@ -1221,6 +1274,8 @@ class ApiService {
       'rejectionResolution': obj.get<String>('rejectionResolution'),
       'jobTitle': obj.get<String>('jobTitle'),
       'jobCompany': obj.get<String>('jobCompany'),
+      'bidAmountPesewas': obj.get<int>('bidAmountPesewas'),
+      'bidStatus': obj.get<String>('bidStatus') ?? 'none',
     };
   }
 

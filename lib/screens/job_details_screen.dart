@@ -291,9 +291,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
     // Check if user is the poster (posters can always chat)
     final currentUserId = context.read<AuthProvider>().user?.id;
+    final currentEmail = context.read<AuthProvider>().user?.email;
     final isPoster = currentUserId == widget.job.posterId;
 
-    // If seeker, check admin-controlled canChat status
+    // If seeker, check admin-controlled canChat status and bid acceptance
     if (!isPoster) {
       try {
         final seekerProfile = await ApiService.getGigSeekerProfile();
@@ -314,8 +315,37 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           }
           return;
         }
+
+        // Check if seeker has an approved bid for this job
+        if (currentEmail != null) {
+          final apps = await ApiService.getApplications(
+            email: currentEmail,
+            jobId: widget.job.id,
+          );
+          if (apps.isNotEmpty && apps.first.hasBid && !apps.first.isBidApproved) {
+            if (context.mounted) {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Bid Pending'),
+                  content: const Text(
+                    'Your bid is still being reviewed by the gig poster. '
+                    'Chat will be enabled once your bid is accepted.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return;
+          }
+        }
       } catch (e) {
-        // If profile check fails, allow the attempt and let server decide
+        // If checks fail, allow the attempt and let server decide
       }
     }
 

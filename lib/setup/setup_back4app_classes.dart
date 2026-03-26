@@ -98,6 +98,8 @@ Future<void> main() async {
     'jobCompany': '_seed_',
     'coverLetter': '_seed_',
     'location': '_seed_',
+    'bidAmountPesewas': 0,
+    'bidStatus': 'none',
   });
 
   // 3. Conversation class

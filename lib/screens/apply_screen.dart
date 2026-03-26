@@ -4,6 +4,7 @@ import '../models/job.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
+import 'bid_screen.dart';
 import 'pro_subscription_screen.dart';
 
 class ApplyScreen extends StatefulWidget {
@@ -352,11 +353,34 @@ class _ApplyScreenState extends State<ApplyScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Application submitted successfully!'),
+            content: Text('Application submitted! Now place your bid.'),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context);
+
+        // Get the application ID for bidding
+        final apps = await ApiService.getApplications(
+          email: _emailController.text,
+          jobId: widget.job.id,
+        );
+        final appId = apps.isNotEmpty ? apps.first.id : null;
+
+        if (mounted && appId != null) {
+          // Navigate to bid screen
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => BidScreen(
+                job: widget.job,
+                applicationId: appId,
+              ),
+            ),
+          );
+        }
+
+        if (mounted) {
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {

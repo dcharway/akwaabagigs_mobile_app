@@ -16,6 +16,9 @@ class Application {
   final String? rejectionResolution;
   final String? jobTitle;
   final String? jobCompany;
+  // Bid fields
+  final int? bidAmountPesewas;
+  final String bidStatus; // none, pending, approved, rejected
 
   Application({
     required this.id,
@@ -35,7 +38,20 @@ class Application {
     this.rejectionResolution,
     this.jobTitle,
     this.jobCompany,
+    this.bidAmountPesewas,
+    this.bidStatus = 'none',
   });
+
+  /// Bid amount in GHS (from pesewas)
+  double? get bidAmountGhs =>
+      bidAmountPesewas != null ? bidAmountPesewas! / 100 : null;
+
+  bool get hasBid =>
+      bidAmountPesewas != null && bidAmountPesewas! > 0;
+
+  bool get isBidApproved => bidStatus == 'approved';
+  bool get isBidPending => bidStatus == 'pending';
+  bool get isBidRejected => bidStatus == 'rejected';
 
   factory Application.fromJson(Map<String, dynamic> json) {
     return Application(
@@ -61,6 +77,8 @@ class Application {
       rejectionResolution: json['rejectionResolution'],
       jobTitle: json['jobTitle'],
       jobCompany: json['jobCompany'],
+      bidAmountPesewas: json['bidAmountPesewas'],
+      bidStatus: json['bidStatus'] ?? 'none',
     );
   }
 
