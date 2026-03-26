@@ -11,6 +11,11 @@ class GigSeeker {
   final String? rejectionReason;
   final bool canChat;
   final String? profilePictureUrl;
+  // KYC fields
+  final String kycStatus; // none, pending, verified, failed
+  final double? kycScore; // Face match percentage
+  final String? kycJobId; // Smile ID job reference
+  final String? verifiedDocType; // GHANA_CARD, VOTER_ID, etc.
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -27,6 +32,10 @@ class GigSeeker {
     this.rejectionReason,
     required this.canChat,
     this.profilePictureUrl,
+    this.kycStatus = 'none',
+    this.kycScore,
+    this.kycJobId,
+    this.verifiedDocType,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -45,6 +54,12 @@ class GigSeeker {
       rejectionReason: json['rejectionReason'],
       canChat: json['canChat'] ?? false,
       profilePictureUrl: json['profilePictureUrl'],
+      kycStatus: json['kycStatus'] ?? 'none',
+      kycScore: (json['kycScore'] is num)
+          ? (json['kycScore'] as num).toDouble()
+          : null,
+      kycJobId: json['kycJobId'],
+      verifiedDocType: json['verifiedDocType'],
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(json['updatedAt'] ?? '') ?? DateTime.now(),
     );
@@ -52,4 +67,6 @@ class GigSeeker {
 
   bool get isVerified => verificationStatus == 'verified';
   bool get isPending => verificationStatus == 'pending';
+  bool get isKycVerified => kycStatus == 'verified';
+  bool get isKycPending => kycStatus == 'pending';
 }

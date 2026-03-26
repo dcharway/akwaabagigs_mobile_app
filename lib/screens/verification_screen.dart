@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../utils/colors.dart';
+import 'kyc_verification_screen.dart';
 
 class VerificationScreen extends StatefulWidget {
   const VerificationScreen({super.key});
@@ -35,7 +37,8 @@ class _VerificationScreenState extends State<VerificationScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Verification submitted! An admin will review your profile.'),
+            content: Text(
+                'Verification submitted! Complete ID scan for instant verification.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -70,6 +73,87 @@ class _VerificationScreenState extends State<VerificationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Smile ID KYC banner
+              GestureDetector(
+                onTap: () async {
+                  final verified = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const KycVerificationScreen()),
+                  );
+                  if (verified == true && mounted) {
+                    Navigator.pop(context, true);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.amber500, AppColors.amber700],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.face,
+                            color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Instant ID Verification',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Scan your ID + selfie for AI-powered verification. Get verified in seconds!',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios,
+                          color: Colors.white70, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Divider with "or"
+              const Row(
+                children: [
+                  Expanded(child: Divider()),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text('or submit manually',
+                        style: TextStyle(
+                            color: AppColors.gray500, fontSize: 12)),
+                  ),
+                  Expanded(child: Divider()),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
               Card(
                 color: Theme.of(context).colorScheme.primaryContainer,
                 child: Padding(
@@ -78,14 +162,18 @@ class _VerificationScreenState extends State<VerificationScreen> {
                     children: [
                       Icon(
                         Icons.verified_user_outlined,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onPrimaryContainer,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Submit your Ghana Card details to verify your poster account. This lets you post gigs and communicate with seekers.',
+                          'Submit your Ghana Card details for manual admin review.',
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
                           ),
                         ),
                       ),
@@ -114,9 +202,13 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 keyboardType: TextInputType.number,
                 maxLength: 10,
                 validator: (v) {
-                  if (v == null || v.isEmpty) return 'GH Card number is required';
+                  if (v == null || v.isEmpty) {
+                    return 'GH Card number is required';
+                  }
                   if (v.length != 10) return 'Must be exactly 10 digits';
-                  if (!RegExp(r'^\d+$').hasMatch(v)) return 'Must be numbers only';
+                  if (!RegExp(r'^\d+$').hasMatch(v)) {
+                    return 'Must be numbers only';
+                  }
                   return null;
                 },
               ),
@@ -130,15 +222,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
                   hintText: '+233...',
                 ),
                 keyboardType: TextInputType.phone,
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Phone number is required' : null,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Make sure you have already uploaded your Ghana Card image in your poster profile before submitting.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+                validator: (v) => v == null || v.isEmpty
+                    ? 'Phone number is required'
+                    : null,
               ),
               const SizedBox(height: 32),
 
@@ -158,7 +244,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Submit for Verification',
+                      : const Text('Submit for Manual Review',
                           style: TextStyle(fontSize: 16)),
                 ),
               ),

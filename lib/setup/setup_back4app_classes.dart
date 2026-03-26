@@ -146,6 +146,10 @@ Future<void> main() async {
     'rejectionReason': '_seed_',
     'canChat': false,
     'profilePictureUrl': '_seed_',
+    'kycStatus': 'none',
+    'kycScore': 0.0,
+    'kycJobId': '_seed_',
+    'verifiedDocType': '_seed_',
   });
 
   // 6. GigPoster class

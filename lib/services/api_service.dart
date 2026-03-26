@@ -1143,6 +1143,64 @@ class ApiService {
     }
   }
 
+  // ============ KYC (Smile ID) ============
+
+  /// Save KYC job ID after selfie+ID capture, set status to pending
+  static Future<void> submitKycJob({
+    required String seekerClassId, // GigSeeker objectId
+    required String jobId, // Smile ID job ID
+    required String docType, // GHANA_CARD, VOTER_ID, etc.
+  }) async {
+    final seeker = ParseObject(Back4AppConfig.gigSeekerClass)
+      ..objectId = seekerClassId
+      ..set('kycStatus', 'pending')
+      ..set('kycJobId', jobId)
+      ..set('verifiedDocType', docType);
+
+    final response = await seeker.save();
+    if (!response.success) {
+      throw Exception('Failed to save KYC job: ${response.error?.message}');
+    }
+  }
+
+  /// Check KYC result via Cloud Function (polls Smile ID API)
+  static Future<Map<String, dynamic>> checkKycResult(String jobId) async {
+    final response = await ParseCloudFunction('verifySmileKYC').execute(
+      parameters: {'jobId': jobId},
+    );
+    if (response.success && response.result != null) {
+      return Map<String, dynamic>.from(response.result);
+    }
+    throw Exception(
+        'KYC check failed: ${response.error?.message}');
+  }
+
+  /// Update GigSeeker KYC fields after successful verification
+  static Future<void> updateKycStatus({
+    required String seekerClassId,
+    required String status,
+    double? score,
+  }) async {
+    final seeker = ParseObject(Back4AppConfig.gigSeekerClass)
+      ..objectId = seekerClassId
+      ..set('kycStatus', status);
+
+    if (status == 'verified') {
+      seeker
+        ..set('verificationStatus', 'verified')
+        ..set('canChat', true);
+      if (score != null) {
+        seeker.set('kycScore', score);
+      }
+    }
+
+    final response = await seeker.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to update KYC status: ${response.error?.message}');
+    }
+  }
+
   // ============ STORE (Products & Orders) ============
 
   static Future<bool> isCurrentUserAdmin() async {
@@ -1594,6 +1652,10 @@ class ApiService {
       'rejectionReason': obj.get<String>('rejectionReason'),
       'canChat': obj.get<bool>('canChat') ?? false,
       'profilePictureUrl': obj.get<String>('profilePictureUrl'),
+      'kycStatus': obj.get<String>('kycStatus') ?? 'none',
+      'kycScore': obj.get<num>('kycScore')?.toDouble(),
+      'kycJobId': obj.get<String>('kycJobId'),
+      'verifiedDocType': obj.get<String>('verifiedDocType'),
       'createdAt': obj.createdAt?.toIso8601String() ?? '',
       'updatedAt': obj.updatedAt?.toIso8601String() ?? '',
     };
