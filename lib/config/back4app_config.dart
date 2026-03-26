@@ -15,4 +15,6 @@ class Back4AppConfig {
   static const String gigPosterClass = 'GigPoster';
   static const String ratingClass = 'Rating';
   static const String paymentClass = 'Payment';
+  static const String escrowClass = 'Escrow';
+  static const String subscriptionClass = 'Subscription';
 }

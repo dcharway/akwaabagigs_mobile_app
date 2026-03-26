@@ -201,6 +201,21 @@ class _ApplyScreenState extends State<ApplyScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      // Check bid availability (free users get 5/month, bid packs add more)
+      final canBid = await ApiService.useBid();
+      if (!canBid) {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'You have used all your bids this month. Purchase a Bid Pack to apply for more gigs.'),
+            ),
+          );
+        }
+        return;
+      }
+
       await ApiService.submitApplication(
         jobId: widget.job.id,
         fullName: _fullNameController.text,

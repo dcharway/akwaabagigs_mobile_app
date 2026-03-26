@@ -20,6 +20,15 @@ class JobsProvider extends ChangeNotifier {
 
   List<Job> get _filteredJobs {
     var filtered = _jobs.where((job) => job.status == 'active').toList();
+
+    // Sort: featured first, then urgent, then by date
+    filtered.sort((a, b) {
+      if (a.isCurrentlyFeatured && !b.isCurrentlyFeatured) return -1;
+      if (!a.isCurrentlyFeatured && b.isCurrentlyFeatured) return 1;
+      if (a.isUrgent && !b.isUrgent) return -1;
+      if (!a.isUrgent && b.isUrgent) return 1;
+      return b.postedDate.compareTo(a.postedDate);
+    });
     
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();

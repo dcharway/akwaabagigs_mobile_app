@@ -37,6 +37,71 @@ class JobCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Featured / Urgent badges
+            if (job.isCurrentlyFeatured || job.isUrgent)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: job.isCurrentlyFeatured
+                        ? [AppColors.amber500, AppColors.amber700]
+                        : [AppColors.red500, AppColors.red700],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    Icon(
+                      job.isCurrentlyFeatured
+                          ? Icons.star
+                          : Icons.bolt,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      job.isCurrentlyFeatured
+                          ? 'FEATURED'
+                          : 'URGENT',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    if (job.isCurrentlyFeatured && job.isUrgent) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.bolt,
+                                size: 10, color: Colors.white),
+                            SizedBox(width: 2),
+                            Text('URGENT',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             if (job.gigImages.isNotEmpty)
               SizedBox(
                 height: 140,

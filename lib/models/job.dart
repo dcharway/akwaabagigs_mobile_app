@@ -14,6 +14,13 @@ class Job {
   final DateTime postedDate;
   final String status;
   final String? category;
+  // Revenue/monetization fields
+  final bool isFeatured;
+  final bool isUrgent;
+  final DateTime? featuredUntil;
+  final int? offerAmount;
+  final String escrowStatus; // none, funded, released, refunded
+  final int escrowAmount;
 
   Job({
     required this.id,
@@ -31,7 +38,18 @@ class Job {
     required this.postedDate,
     required this.status,
     this.category,
+    this.isFeatured = false,
+    this.isUrgent = false,
+    this.featuredUntil,
+    this.offerAmount,
+    this.escrowStatus = 'none',
+    this.escrowAmount = 0,
   });
+
+  bool get isCurrentlyFeatured =>
+      isFeatured &&
+      featuredUntil != null &&
+      featuredUntil!.isAfter(DateTime.now());
 
   factory Job.fromJson(Map<String, dynamic> json) {
     return Job(
@@ -50,6 +68,14 @@ class Job {
       postedDate: DateTime.tryParse(json['postedDate'] ?? '') ?? DateTime.now(),
       status: json['status'] ?? 'active',
       category: json['category'],
+      isFeatured: json['isFeatured'] ?? false,
+      isUrgent: json['isUrgent'] ?? false,
+      featuredUntil: json['featuredUntil'] != null
+          ? DateTime.tryParse(json['featuredUntil'])
+          : null,
+      offerAmount: json['offerAmount'],
+      escrowStatus: json['escrowStatus'] ?? 'none',
+      escrowAmount: json['escrowAmount'] ?? 0,
     );
   }
 
@@ -70,6 +96,12 @@ class Job {
       'postedDate': postedDate.toIso8601String(),
       'status': status,
       'category': category,
+      'isFeatured': isFeatured,
+      'isUrgent': isUrgent,
+      'featuredUntil': featuredUntil?.toIso8601String(),
+      'offerAmount': offerAmount,
+      'escrowStatus': escrowStatus,
+      'escrowAmount': escrowAmount,
     };
   }
 }

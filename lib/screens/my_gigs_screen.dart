@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/job.dart';
 import '../services/api_service.dart';
+import '../utils/colors.dart';
 import 'job_details_screen.dart';
 import 'edit_gig_screen.dart';
 import 'job_applications_screen.dart';
+import 'boost_gig_screen.dart';
+import 'escrow_screen.dart';
+import 'payment_screen.dart';
 
 class MyGigsScreen extends StatefulWidget {
   const MyGigsScreen({super.key});
@@ -45,6 +49,8 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
     switch (status) {
       case 'active':
         return Colors.green;
+      case 'pending_payment':
+        return AppColors.amber600;
       case 'pending_service':
         return Colors.orange;
       case 'completed':
@@ -63,6 +69,8 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
     switch (status) {
       case 'active':
         return 'Active';
+      case 'pending_payment':
+        return 'Pending Payment';
       case 'pending_service':
         return 'In Progress';
       case 'completed':
@@ -277,6 +285,83 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
                 ],
               ),
               const Divider(height: 24),
+              // Badges row
+              if (job.isCurrentlyFeatured || job.isUrgent) ...[
+                Row(
+                  children: [
+                    if (job.isCurrentlyFeatured)
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              AppColors.amber500,
+                              AppColors.amber700
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.star,
+                                size: 12, color: Colors.white),
+                            SizedBox(width: 3),
+                            Text('Featured',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                    if (job.isUrgent)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.red500,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.bolt,
+                                size: 12, color: Colors.white),
+                            SizedBox(width: 3),
+                            Text('Urgent',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                    if (job.escrowStatus == 'funded')
+                      Container(
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.blue500,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Escrow: GHS ${job.escrowAmount}',
+                          style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              const Divider(height: 16),
+              // Actions row 1
               Row(
                 children: [
                   _buildActionButton(
@@ -305,7 +390,46 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
                       if (updated == true) _loadMyJobs();
                     },
                   ),
-                  const SizedBox(width: 8),
+                  if (job.status == 'active') ...[
+                    const SizedBox(width: 8),
+                    _buildActionButton(
+                      context,
+                      Icons.star_outline,
+                      'Boost',
+                      () async {
+                        final boosted = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => BoostGigScreen(job: job),
+                          ),
+                        );
+                        if (boosted == true) _loadMyJobs();
+                      },
+                      color: AppColors.amber600,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildActionButton(
+                      context,
+                      Icons.account_balance_wallet_outlined,
+                      'Escrow',
+                      () async {
+                        final result = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => EscrowScreen(job: job),
+                          ),
+                        );
+                        if (result == true) _loadMyJobs();
+                      },
+                      color: AppColors.blue600,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              // Actions row 2
+              Row(
+                children: [
                   if (job.status == 'active')
                     _buildActionButton(
                       context,
@@ -314,6 +438,24 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
                       () => _updateJobStatus(job, 'completed'),
                     ),
                   if (job.status == 'active') const SizedBox(width: 8),
+                  if (job.status == 'pending_payment')
+                    _buildActionButton(
+                      context,
+                      Icons.payment,
+                      'Pay Now',
+                      () async {
+                        final paid = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PaymentScreen(job: job),
+                          ),
+                        );
+                        if (paid == true) _loadMyJobs();
+                      },
+                      color: AppColors.amber600,
+                    ),
+                  if (job.status == 'pending_payment')
+                    const SizedBox(width: 8),
                   _buildActionButton(
                     context,
                     Icons.delete_outline,
@@ -336,8 +478,9 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
     String label,
     VoidCallback onTap, {
     bool isDestructive = false,
+    Color? color,
   }) {
-    final color =
+    color ??=
         isDestructive ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary;
     return InkWell(
       onTap: onTap,
