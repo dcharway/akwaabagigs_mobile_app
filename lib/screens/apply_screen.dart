@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../models/job.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/colors.dart';
+import 'pro_subscription_screen.dart';
 
 class ApplyScreen extends StatefulWidget {
   final Job job;
@@ -21,11 +23,23 @@ class _ApplyScreenState extends State<ApplyScreen> {
   final _locationController = TextEditingController();
   final _coverLetterController = TextEditingController();
   bool _isSubmitting = false;
+  Map<String, dynamic>? _bidInfo;
+  bool _isLoadingBids = true;
 
   @override
   void initState() {
     super.initState();
     _prefillUserData();
+    _loadBidInfo();
+  }
+
+  Future<void> _loadBidInfo() async {
+    try {
+      final info = await ApiService.getBidInfo();
+      if (mounted) setState(() { _bidInfo = info; _isLoadingBids = false; });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingBids = false);
+    }
   }
 
   void _prefillUserData() {
@@ -84,7 +98,11 @@ class _ApplyScreenState extends State<ApplyScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              // Bid info banner
+              if (!_isLoadingBids && _bidInfo != null)
+                _buildBidInfoBanner(),
+              const SizedBox(height: 16),
               Text(
                 'Your Details',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -191,6 +209,112 @@ class _ApplyScreenState extends State<ApplyScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildBidInfoBanner() {
+    final bidsRemaining = _bidInfo!['bidsRemaining'] as int;
+    final totalBids = _bidInfo!['totalBids'] as int;
+    final tier = _bidInfo!['tier'] as String;
+    final isUnlimited = bidsRemaining == -1;
+    final isLow = !isUnlimited && bidsRemaining <= 2;
+    final isOut = !isUnlimited && bidsRemaining <= 0;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isOut
+            ? AppColors.red50
+            : isLow
+                ? AppColors.amber50
+                : AppColors.blue500.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isOut
+              ? AppColors.red500.withOpacity(0.3)
+              : isLow
+                  ? AppColors.amber400.withOpacity(0.3)
+                  : AppColors.blue500.withOpacity(0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isOut
+                ? Icons.warning_amber_rounded
+                : Icons.local_offer,
+            size: 20,
+            color: isOut
+                ? AppColors.red600
+                : isLow
+                    ? AppColors.amber700
+                    : AppColors.blue600,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isUnlimited
+                      ? 'Unlimited applications ($tier)'
+                      : isOut
+                          ? 'No bids remaining'
+                          : '$bidsRemaining of $totalBids bids left this month',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: isOut
+                        ? AppColors.red600
+                        : isLow
+                            ? AppColors.amber700
+                            : AppColors.blue600,
+                  ),
+                ),
+                if (isOut)
+                  const Text(
+                    'Purchase a Bid Pack to continue applying.',
+                    style:
+                        TextStyle(fontSize: 11, color: AppColors.gray600),
+                  ),
+                if (tier == 'free' && !isOut)
+                  const Text(
+                    'Free tier — resets monthly',
+                    style:
+                        TextStyle(fontSize: 11, color: AppColors.gray500),
+                  ),
+              ],
+            ),
+          ),
+          if (!isUnlimited)
+            GestureDetector(
+              onTap: () async {
+                final result = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ProSubscriptionScreen()),
+                );
+                if (result == true && mounted) _loadBidInfo();
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: isOut ? AppColors.red600 : AppColors.blue600,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isOut ? 'Buy Bids' : 'Get More',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

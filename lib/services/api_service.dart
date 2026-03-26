@@ -970,6 +970,60 @@ class ApiService {
     return true;
   }
 
+  /// Returns bid info for the current user without consuming a bid.
+  /// { 'bidsRemaining': int, 'totalBids': int, 'tier': String, 'hasSubscription': bool }
+  static Future<Map<String, dynamic>> getBidInfo() async {
+    final sub = await getActiveSubscription();
+    if (sub == null) {
+      // Free tier: count this month's applications
+      final user = await ParseUser.currentUser() as ParseUser?;
+      if (user == null) {
+        return {
+          'bidsRemaining': 0,
+          'totalBids': 5,
+          'tier': 'free',
+          'hasSubscription': false,
+        };
+      }
+      final now = DateTime.now();
+      final monthStart = DateTime(now.year, now.month, 1);
+      final appQuery = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.applicationClass))
+        ..whereEqualTo('email', user.emailAddress)
+        ..whereGreaterThanOrEqualsTo(
+            'createdAt', monthStart.toIso8601String());
+      final response = await appQuery.query();
+      final usedThisMonth = (response.success && response.results != null)
+          ? response.results!.length
+          : 0;
+      const freeLimit = 5;
+      return {
+        'bidsRemaining': (freeLimit - usedThisMonth).clamp(0, freeLimit),
+        'totalBids': freeLimit,
+        'tier': 'free',
+        'hasSubscription': false,
+      };
+    }
+
+    final tier = sub['tier'] as String? ?? 'free';
+    // Verified Pro and Bulk Poster get unlimited
+    if (tier == 'verified_pro' || tier == 'bulk_poster') {
+      return {
+        'bidsRemaining': -1, // -1 means unlimited
+        'totalBids': -1,
+        'tier': tier,
+        'hasSubscription': true,
+      };
+    }
+
+    return {
+      'bidsRemaining': sub['bidsRemaining'] as int? ?? 0,
+      'totalBids': sub['totalBids'] as int? ?? 0,
+      'tier': tier,
+      'hasSubscription': true,
+    };
+  }
+
   // ============ PAYMENTS ============
 
   static Future<void> recordPayment({
