@@ -187,6 +187,68 @@ Parse.Cloud.define('getVerificationStatus', async (request) => {
   };
 });
 
+// ============ KYC (Smile ID) ============
+
+/**
+ * Verify a user's KYC via Smile ID API.
+ * Called after selfie+ID scan completes.
+ *
+ * Params: { jobId: string }
+ * Returns: { success: boolean, score: number }
+ */
+Parse.Cloud.define('verifySmileKYC', async (request) => {
+  const { jobId } = request.params;
+  if (!jobId) {
+    throw new Parse.Error(Parse.Error.INVALID_VALUE, 'jobId is required');
+  }
+
+  // In production, poll the Smile ID API for results:
+  // const SMILE_TOKEN = process.env.SMILE_ID_API_KEY || 'YOUR_TOKEN';
+  // const response = await fetch(`https://api.smileid.com/v1/job_status`, {
+  //   method: 'POST',
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //     'Authorization': `Bearer ${SMILE_TOKEN}`,
+  //   },
+  //   body: JSON.stringify({ job_id: jobId, partner_id: 'YOUR_PARTNER_ID' }),
+  // }).then(r => r.json());
+  //
+  // if (response.result && response.result.ResultCode === '0810') {
+  //   // Successful verification
+  //   const score = response.result.ConfidenceValue || 99.0;
+  //   // Update the GigSeeker record
+  //   const seekerQuery = new Parse.Query('GigSeeker');
+  //   seekerQuery.equalTo('kycJobId', jobId);
+  //   const seeker = await seekerQuery.first({ useMasterKey: true });
+  //   if (seeker) {
+  //     seeker.set('kycStatus', 'verified');
+  //     seeker.set('kycScore', score);
+  //     seeker.set('verificationStatus', 'verified');
+  //     seeker.set('canChat', true);
+  //     await seeker.save(null, { useMasterKey: true });
+  //   }
+  //   return { success: true, score };
+  // }
+  // throw 'Verification failed: ' + (response.result?.ResultText || 'Unknown error');
+
+  // Sandbox/demo: Find the seeker with this jobId and auto-verify
+  const seekerQuery = new Parse.Query('GigSeeker');
+  seekerQuery.equalTo('kycJobId', jobId);
+  const seeker = await seekerQuery.first({ useMasterKey: true });
+
+  if (seeker) {
+    const score = 99.8; // Sandbox score
+    seeker.set('kycStatus', 'verified');
+    seeker.set('kycScore', score);
+    seeker.set('verificationStatus', 'verified');
+    seeker.set('canChat', true);
+    await seeker.save(null, { useMasterKey: true });
+    return { success: true, score };
+  }
+
+  throw 'No pending KYC job found for: ' + jobId;
+});
+
 // ============ STORE: ADMIN-ONLY PRODUCT ENFORCEMENT ============
 
 /**

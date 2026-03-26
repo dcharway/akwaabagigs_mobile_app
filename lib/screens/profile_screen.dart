@@ -10,6 +10,7 @@ import 'edit_poster_profile_screen.dart';
 import 'verification_screen.dart';
 import 'seeker_ratings_screen.dart';
 import 'pro_subscription_screen.dart';
+import 'kyc_verification_screen.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -252,6 +253,119 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildStatusBadge(context, seeker.verificationStatus),
               ],
             ),
+            // KYC badge
+            if (seeker.isKycVerified)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4CAF50).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: const Color(0xFF4CAF50).withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.verified,
+                          size: 18, color: Color(0xFF4CAF50)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'ID Verified',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF2E7D32),
+                              ),
+                            ),
+                            if (seeker.kycScore != null)
+                              Text(
+                                '${seeker.kycScore!.toStringAsFixed(1)}% match'
+                                '${seeker.verifiedDocType != null ? ' • ${seeker.verifiedDocType}' : ''}',
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF388E3C)),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (!seeker.isKycVerified)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: GestureDetector(
+                  onTap: () async {
+                    final verified = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => KycVerificationScreen(
+                            seekerProfile: seeker),
+                      ),
+                    );
+                    if (verified == true) _loadProfiles();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.amber50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: AppColors.amber400.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.face,
+                            size: 18, color: AppColors.amber600),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Verify your ID',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.amber700,
+                                ),
+                              ),
+                              Text(
+                                'Scan ID + selfie for instant verification',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.gray500),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.amber600,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Verify',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             const Divider(height: 24),
             _buildProfileRow(context, Icons.phone, seeker.phone),
             _buildProfileRow(context, Icons.location_on, seeker.location),
