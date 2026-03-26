@@ -19,7 +19,9 @@ class JobsProvider extends ChangeNotifier {
   String? get selectedLocation => _selectedLocation;
 
   List<Job> get _filteredJobs {
-    var filtered = _jobs.where((job) => job.status == 'active').toList();
+    var filtered = _jobs
+        .where((job) => job.status == 'active' || job.status == 'bid_agreed')
+        .toList();
 
     // Sort: featured first, then urgent, then by date
     filtered.sort((a, b) {
