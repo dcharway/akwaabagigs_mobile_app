@@ -22,6 +22,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   GigSeeker? _seekerProfile;
   GigPoster? _posterProfile;
+  Map<String, dynamic>? _bidInfo;
   bool _isLoading = true;
 
   @override
@@ -36,6 +37,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       _seekerProfile = await ApiService.getGigSeekerProfile();
       _posterProfile = await ApiService.getGigPosterProfile();
+      _bidInfo = await ApiService.getBidInfo();
     } catch (e) {
       debugPrint('Error loading profiles: $e');
     }
@@ -313,6 +315,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
+            // Bids remaining
+            if (_bidInfo != null) ...[
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () async {
+                  final result = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            const ProSubscriptionScreen()),
+                  );
+                  if (result == true) _loadProfiles();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.blue500.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.blue500.withOpacity(0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.local_offer,
+                          size: 18, color: AppColors.blue600),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (_bidInfo!['bidsRemaining'] as int) == -1
+                                  ? 'Unlimited Applications'
+                                  : '${_bidInfo!['bidsRemaining']} of ${_bidInfo!['totalBids']} bids remaining',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.blue600,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              _bidInfo!['tier'] == 'free'
+                                  ? 'Free tier — resets monthly'
+                                  : '${_bidInfo!['tier']} plan',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if ((_bidInfo!['bidsRemaining'] as int) != -1)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.blue600,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Get More',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             if (seeker.rejectionReason != null) ...[
               const SizedBox(height: 8),
               Container(
