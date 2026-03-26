@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
+import 'payment_screen.dart';
 
 class PostGigScreen extends StatefulWidget {
   const PostGigScreen({super.key});
@@ -106,7 +107,8 @@ class _PostGigScreenState extends State<PostGigScreen> {
         imageUrls = await ApiService.uploadGigImages(_selectedImages);
       }
 
-      await ApiService.createJob(
+      // Create job as pending_payment — won't go live until payment
+      final job = await ApiService.createJob(
         title: _titleController.text.trim(),
         company: _companyController.text.trim(),
         description: _descriptionController.text.trim(),
@@ -120,13 +122,35 @@ class _PostGigScreenState extends State<PostGigScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Gig posted successfully!'),
-            backgroundColor: Colors.green,
+        // Set status to pending_payment before redirecting
+        await ApiService.updateJob(job.id, {'status': 'pending_payment'});
+
+        // Navigate to payment screen
+        final paid = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PaymentScreen(job: job),
           ),
         );
-        Navigator.pop(context, true);
+
+        if (mounted) {
+          if (paid == true) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Gig posted and payment completed!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    'Gig saved as draft. Complete payment to go live.'),
+              ),
+            );
+          }
+          Navigator.pop(context, paid == true);
+        }
       }
     } catch (e) {
       if (mounted) {

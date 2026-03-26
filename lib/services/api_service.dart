@@ -753,6 +753,46 @@ class ApiService {
         response.results!.isNotEmpty;
   }
 
+  // ============ PAYMENTS ============
+
+  static Future<void> recordPayment({
+    required String jobId,
+    required int amount,
+    required String currency,
+    required String paymentMethod,
+    required String paymentTier,
+    required String duration,
+    String? phone,
+    String? reference,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    final payment = ParseObject(Back4AppConfig.paymentClass)
+      ..set('jobId', jobId)
+      ..set('userId', user.objectId)
+      ..set('amount', amount)
+      ..set('currency', currency)
+      ..set('paymentMethod', paymentMethod)
+      ..set('paymentTier', paymentTier)
+      ..set('duration', duration)
+      ..set('status', 'completed')
+      ..set('paidAt', DateTime.now().toIso8601String());
+
+    if (phone != null && phone.isNotEmpty) {
+      payment.set('phone', phone);
+    }
+    if (reference != null && reference.isNotEmpty) {
+      payment.set('reference', reference);
+    }
+
+    final response = await payment.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to record payment: ${response.error?.message}');
+    }
+  }
+
   // ============ ADMIN CLOUD FUNCTIONS ============
   // These call Back4App Cloud Code functions for admin verification toggles.
   // Admins can also toggle directly in the Back4App dashboard.

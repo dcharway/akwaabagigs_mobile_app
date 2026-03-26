@@ -176,7 +176,23 @@ Future<void> main() async {
     'review': '_seed_',
   });
 
-  // 8. Add firstName/lastName to _User class (by creating a temp user)
+  // 8. Payment class
+  print('Creating Payment class...');
+  seedIds['Payment'] = await createObject('Payment', {
+    'jobId': '_seed_',
+    'userId': '_seed_',
+    'amount': 0,
+    'currency': 'GHS',
+    'paymentMethod': '_seed_',
+    'paymentTier': '_seed_',
+    'duration': '_seed_',
+    'status': 'pending',
+    'phone': '_seed_',
+    'reference': '_seed_',
+    'paidAt': '_seed_',
+  });
+
+  // 9. Add firstName/lastName to _User class (by creating a temp user)
   print('\nAdding custom fields to _User class...');
   final userResponse = await http.post(
     Uri.parse('$serverUrl/users'),
@@ -226,7 +242,7 @@ Future<void> main() async {
     }
   }
 
-  print('\nDone! All 7 Parse classes have been created on Back4App.');
-  print('Classes: Job, Application, Conversation, Message, GigSeeker, GigPoster, Rating');
+  print('\nDone! All 8 Parse classes have been created on Back4App.');
+  print('Classes: Job, Application, Conversation, Message, GigSeeker, GigPoster, Rating, Payment');
   print('\nYou can verify them in your Back4App dashboard.');
 }
