@@ -771,6 +771,12 @@ class ApiService {
   }
 
   static Future<void> approveBid(String applicationId) async {
+    // First get the application to read bid amount and jobId
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.applicationClass))
+      ..whereEqualTo('objectId', applicationId);
+    final findResponse = await query.query();
+
     final app = ParseObject(Back4AppConfig.applicationClass)
       ..objectId = applicationId
       ..set('bidStatus', 'approved')
@@ -779,6 +785,26 @@ class ApiService {
     final response = await app.save();
     if (!response.success) {
       throw Exception('Failed to approve bid: ${response.error?.message}');
+    }
+
+    // Enable chat on the Job and record agreed amount
+    if (findResponse.success &&
+        findResponse.results != null &&
+        findResponse.results!.isNotEmpty) {
+      final appObj = findResponse.results!.first as ParseObject;
+      final jobId = appObj.get<String>('jobId');
+      final bidAmount = appObj.get<int>('bidAmountPesewas');
+
+      if (jobId != null) {
+        final job = ParseObject(Back4AppConfig.jobClass)
+          ..objectId = jobId
+          ..set('chatEnabled', true)
+          ..set('status', 'bid_agreed');
+        if (bidAmount != null) {
+          job.set('agreedAmountPesewas', bidAmount);
+        }
+        await job.save();
+      }
     }
   }
 
@@ -1250,6 +1276,8 @@ class ApiService {
       'offerAmount': obj.get<int>('offerAmount'),
       'escrowStatus': obj.get<String>('escrowStatus') ?? 'none',
       'escrowAmount': obj.get<int>('escrowAmount') ?? 0,
+      'chatEnabled': obj.get<bool>('chatEnabled') ?? false,
+      'agreedAmountPesewas': obj.get<int>('agreedAmountPesewas'),
     };
   }
 

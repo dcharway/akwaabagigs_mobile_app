@@ -19,8 +19,11 @@ class Job {
   final bool isUrgent;
   final DateTime? featuredUntil;
   final int? offerAmount;
-  final String escrowStatus; // none, funded, released, refunded
+  final String escrowStatus;
   final int escrowAmount;
+  // Chat/bid agreement fields
+  final bool chatEnabled;
+  final int? agreedAmountPesewas;
 
   Job({
     required this.id,
@@ -44,12 +47,18 @@ class Job {
     this.offerAmount,
     this.escrowStatus = 'none',
     this.escrowAmount = 0,
+    this.chatEnabled = false,
+    this.agreedAmountPesewas,
   });
 
   bool get isCurrentlyFeatured =>
       isFeatured &&
       featuredUntil != null &&
       featuredUntil!.isAfter(DateTime.now());
+
+  /// Agreed amount in GHS
+  double? get agreedAmountGhs =>
+      agreedAmountPesewas != null ? agreedAmountPesewas! / 100 : null;
 
   factory Job.fromJson(Map<String, dynamic> json) {
     return Job(
@@ -76,6 +85,8 @@ class Job {
       offerAmount: json['offerAmount'],
       escrowStatus: json['escrowStatus'] ?? 'none',
       escrowAmount: json['escrowAmount'] ?? 0,
+      chatEnabled: json['chatEnabled'] ?? false,
+      agreedAmountPesewas: json['agreedAmountPesewas'],
     );
   }
 
@@ -102,6 +113,8 @@ class Job {
       'offerAmount': offerAmount,
       'escrowStatus': escrowStatus,
       'escrowAmount': escrowAmount,
+      'chatEnabled': chatEnabled,
+      'agreedAmountPesewas': agreedAmountPesewas,
     };
   }
 }

@@ -51,6 +51,8 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
         return Colors.green;
       case 'pending_payment':
         return AppColors.amber600;
+      case 'bid_agreed':
+        return const Color(0xFF4CAF50);
       case 'pending_service':
         return Colors.orange;
       case 'completed':
@@ -71,6 +73,8 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
         return 'Active';
       case 'pending_payment':
         return 'Pending Payment';
+      case 'bid_agreed':
+        return 'Bid Agreed — Chat Active';
       case 'pending_service':
         return 'In Progress';
       case 'completed':

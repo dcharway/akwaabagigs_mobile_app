@@ -4,7 +4,7 @@ import '../models/job.dart';
 import '../models/application.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
-import 'chat_screen.dart';
+import 'live_chat_screen.dart';
 import 'rate_seeker_screen.dart';
 
 class JobApplicationsScreen extends StatefulWidget {
@@ -574,38 +574,17 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
     );
   }
 
-  Future<void> _messageApplicant(Application app) async {
-    try {
-      final conversation = await ApiService.createConversation(
-        jobId: widget.job.id,
-        posterId: widget.job.posterId,
-        posterName: widget.job.postedBy,
-        seekerEmail: app.email,
-        seekerName: app.fullName,
-      );
-
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(
-              conversationId: conversation.id,
-              otherPartyName: app.fullName,
-              jobTitle: widget.job.title,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
+  void _messageApplicant(Application app) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LiveChatScreen(
+          jobId: widget.job.id,
+          jobTitle: widget.job.title,
+          otherPartyName: app.fullName,
+        ),
+      ),
+    );
   }
 
   String _formatDocType(String type) {
