@@ -228,7 +228,40 @@ Future<void> main() async {
     'purchasedAt': '_seed_',
   });
 
-  // 11. Add firstName/lastName to _User class (by creating a temp user)
+  // 11. Product class
+  print('Creating Product class...');
+  seedIds['Product'] = await createObject('Product', {
+    'name': '_seed_',
+    'description': '_seed_',
+    'pricePesewas': 0,
+    'stock': 0,
+    'category': '_seed_',
+    'status': 'active',
+    'images': ['_seed_'],
+    'sellerId': '_seed_',
+    'sellerName': '_seed_',
+  });
+
+  // 12. StoreOrder class
+  print('Creating StoreOrder class...');
+  seedIds['StoreOrder'] = await createObject('StoreOrder', {
+    'productId': '_seed_',
+    'productName': '_seed_',
+    'buyerId': '_seed_',
+    'buyerName': '_seed_',
+    'buyerPhone': '_seed_',
+    'buyerEmail': '_seed_',
+    'quantity': 0,
+    'pricePesewas': 0,
+    'totalPesewas': 0,
+    'commissionPesewas': 0,
+    'paymentMethod': '_seed_',
+    'status': 'pending',
+    'deliveryAddress': '_seed_',
+    'paidAt': '_seed_',
+  });
+
+  // 13. Add firstName/lastName to _User class (by creating a temp user)
   print('\nAdding custom fields to _User class...');
   final userResponse = await http.post(
     Uri.parse('$serverUrl/users'),
@@ -240,6 +273,7 @@ Future<void> main() async {
       'firstName': '_seed_',
       'lastName': '_seed_',
       'profileImageUrl': '_seed_',
+      'isAdmin': false,
     }),
   );
   String? seedUserId;
@@ -278,7 +312,7 @@ Future<void> main() async {
     }
   }
 
-  print('\nDone! All 10 Parse classes have been created on Back4App.');
-  print('Classes: Job, Application, Conversation, Message, GigSeeker, GigPoster, Rating, Payment, Escrow, Subscription');
+  print('\nDone! All 12 Parse classes have been created on Back4App.');
+  print('Classes: Job, Application, Conversation, Message, GigSeeker, GigPoster, Rating, Payment, Escrow, Subscription, Product, StoreOrder');
   print('\nYou can verify them in your Back4App dashboard.');
 }

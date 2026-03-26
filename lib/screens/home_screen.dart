@@ -20,6 +20,7 @@ import 'post_gig_screen.dart';
 import 'my_gigs_screen.dart';
 import 'my_applications_screen.dart';
 import 'saved_gigs_screen.dart';
+import 'store_screen.dart';
 import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -68,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildHomeLanding(),
           _buildGigsTab(),
+          const StoreScreen(),
           const ChatListScreen(),
           const NotificationsScreen(),
           const ProfileScreen(),
@@ -289,23 +291,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 index: 1,
               ),
               _buildNavItem(
+                icon: Icons.shopping_bag_outlined,
+                activeIcon: Icons.shopping_bag,
+                label: 'Store',
+                index: 2,
+              ),
+              _buildNavItem(
                 icon: Icons.chat_bubble_outline,
                 activeIcon: Icons.chat_bubble,
-                label: 'Messages',
-                index: 2,
+                label: 'Chat',
+                index: 3,
               ),
               _buildNavItem(
                 icon: Icons.notifications_outlined,
                 activeIcon: Icons.notifications,
                 label: 'Alerts',
-                index: 3,
+                index: 4,
                 badgeCount: notifProvider.unreadCount,
               ),
               _buildNavItem(
                 icon: Icons.person_outline,
                 activeIcon: Icons.person,
                 label: 'Profile',
-                index: 4,
+                index: 5,
               ),
             ],
           ),
@@ -432,12 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ServicesGridWidget(
                   onGigsTap: _switchToGigsTab,
                   onStoreTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Akwaaba Store coming soon!'),
-                        backgroundColor: AppColors.amber600,
-                      ),
-                    );
+                    setState(() => _currentIndex = 2);
                   },
                 ),
 
