@@ -1069,7 +1069,7 @@ class ApiService {
       final appQuery = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.applicationClass))
         ..whereEqualTo('email', user.emailAddress)
-        ..whereGreaterThanOrEqualsTo(
+        ..whereGreaterThan(
             'createdAt', monthStart.toIso8601String());
       final response = await appQuery.query();
       final usedThisMonth = (response.success && response.results != null)
@@ -1151,8 +1151,8 @@ class ApiService {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.videoAdClass))
       ..whereEqualTo('status', 'active')
-      ..whereLessThanOrEqualsTo('scheduleStart', now)
-      ..whereGreaterThanOrEqualsTo('scheduleEnd', now)
+      ..whereLessThan('scheduleStart', now)
+      ..whereGreaterThan('scheduleEnd', now)
       ..orderByAscending('sortOrder');
 
     final response = await query.query();
