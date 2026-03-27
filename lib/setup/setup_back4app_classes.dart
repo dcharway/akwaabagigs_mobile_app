@@ -265,7 +265,26 @@ Future<void> main() async {
     'paidAt': '_seed_',
   });
 
-  // 13. Add firstName/lastName to _User class (by creating a temp user)
+  // 13. VideoAd class
+  print('Creating VideoAd class...');
+  seedIds['VideoAd'] = await createObject('VideoAd', {
+    'title': '_seed_',
+    'description': '_seed_',
+    'videoUrl': '_seed_',
+    'thumbnailUrl': '_seed_',
+    'advertiserName': '_seed_',
+    'scheduleStart': '_seed_',
+    'scheduleEnd': '_seed_',
+    'pricePesewas': 0,
+    'pricingTier': 'daily',
+    'sortOrder': 0,
+    'status': 'active',
+    'impressions': 0,
+    'clicks': 0,
+    'createdBy': '_seed_',
+  });
+
+  // 14. Add firstName/lastName to _User class (by creating a temp user)
   print('\nAdding custom fields to _User class...');
   final userResponse = await http.post(
     Uri.parse('$serverUrl/users'),
@@ -316,7 +335,7 @@ Future<void> main() async {
     }
   }
 
-  print('\nDone! All 12 Parse classes have been created on Back4App.');
-  print('Classes: Job, Application, Conversation, Message, GigSeeker, GigPoster, Rating, Payment, Escrow, Subscription, Product, StoreOrder');
+  print('\nDone! All 13 Parse classes have been created on Back4App.');
+  print('Classes: Job, Application, Conversation, Message, GigSeeker, GigPoster, Rating, Payment, Escrow, Subscription, Product, StoreOrder, VideoAd');
   print('\nYou can verify them in your Back4App dashboard.');
 }

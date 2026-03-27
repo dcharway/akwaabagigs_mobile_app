@@ -309,3 +309,43 @@ Parse.Cloud.afterSave('StoreOrder', async (request) => {
     await product.save(null, { useMasterKey: true });
   }
 });
+
+// ============ VIDEO ADS: ADMIN-ONLY ENFORCEMENT ============
+
+/**
+ * beforeSave trigger on VideoAd: Only admins can create/update video ads.
+ */
+Parse.Cloud.beforeSave('VideoAd', async (request) => {
+  if (request.master) return;
+
+  const user = request.user;
+  if (!user) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Authentication required');
+  }
+
+  const userQuery = new Parse.Query(Parse.User);
+  const fullUser = await userQuery.get(user.id, { useMasterKey: true });
+
+  if (!fullUser.get('isAdmin')) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Admin access required to manage video ads');
+  }
+});
+
+/**
+ * beforeDelete trigger on VideoAd: Only admins can delete video ads.
+ */
+Parse.Cloud.beforeDelete('VideoAd', async (request) => {
+  if (request.master) return;
+
+  const user = request.user;
+  if (!user) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Authentication required');
+  }
+
+  const userQuery = new Parse.Query(Parse.User);
+  const fullUser = await userQuery.get(user.id, { useMasterKey: true });
+
+  if (!fullUser.get('isAdmin')) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Admin access required to delete video ads');
+  }
+});

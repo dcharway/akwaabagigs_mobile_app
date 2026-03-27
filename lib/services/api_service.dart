@@ -1143,6 +1143,142 @@ class ApiService {
     }
   }
 
+  // ============ VIDEO ADS ============
+
+  /// Get currently scheduled ads that should be playing right now
+  static Future<List<Map<String, dynamic>>> getActiveVideoAds() async {
+    final now = DateTime.now().toIso8601String();
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.videoAdClass))
+      ..whereEqualTo('status', 'active')
+      ..whereLessThanOrEqualTo('scheduleStart', now)
+      ..whereGreaterThanOrEqualTo('scheduleEnd', now)
+      ..orderByAscending('sortOrder');
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => _parseObjectToVideoAdMap(e as ParseObject))
+          .toList();
+    }
+    return [];
+  }
+
+  static Future<List<Map<String, dynamic>>> getAllVideoAds() async {
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.videoAdClass))
+      ..orderByDescending('createdAt');
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => _parseObjectToVideoAdMap(e as ParseObject))
+          .toList();
+    }
+    return [];
+  }
+
+  static Future<Map<String, dynamic>> createVideoAd({
+    required String title,
+    required String description,
+    required String videoUrl,
+    String? thumbnailUrl,
+    required String advertiserName,
+    required String scheduleStart,
+    required String scheduleEnd,
+    required int pricePesewas,
+    required String pricingTier,
+    int sortOrder = 0,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final ad = ParseObject(Back4AppConfig.videoAdClass)
+      ..set('title', title)
+      ..set('description', description)
+      ..set('videoUrl', videoUrl)
+      ..set('thumbnailUrl', thumbnailUrl)
+      ..set('advertiserName', advertiserName)
+      ..set('scheduleStart', scheduleStart)
+      ..set('scheduleEnd', scheduleEnd)
+      ..set('pricePesewas', pricePesewas)
+      ..set('pricingTier', pricingTier)
+      ..set('sortOrder', sortOrder)
+      ..set('status', 'active')
+      ..set('impressions', 0)
+      ..set('clicks', 0)
+      ..set('createdBy', user.objectId);
+
+    final response = await ad.save();
+    if (response.success && response.result != null) {
+      return _parseObjectToVideoAdMap(response.result as ParseObject);
+    }
+    throw Exception('Failed to create video ad: ${response.error?.message}');
+  }
+
+  static Future<void> updateVideoAd(
+      String id, Map<String, dynamic> updates) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+    final ad = ParseObject(Back4AppConfig.videoAdClass)..objectId = id;
+    updates.forEach((key, value) => ad.set(key, value));
+    final response = await ad.save();
+    if (!response.success) {
+      throw Exception('Failed to update ad: ${response.error?.message}');
+    }
+  }
+
+  static Future<void> deleteVideoAd(String id) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+    final ad = ParseObject(Back4AppConfig.videoAdClass)..objectId = id;
+    final response = await ad.delete();
+    if (!response.success) {
+      throw Exception('Failed to delete ad: ${response.error?.message}');
+    }
+  }
+
+  static Future<void> trackAdImpression(String adId) async {
+    final ad = ParseObject(Back4AppConfig.videoAdClass)..objectId = adId;
+    ad.setIncrement('impressions', 1);
+    await ad.save();
+  }
+
+  static Future<void> trackAdClick(String adId) async {
+    final ad = ParseObject(Back4AppConfig.videoAdClass)..objectId = adId;
+    ad.setIncrement('clicks', 1);
+    await ad.save();
+  }
+
+  static Map<String, dynamic> _parseObjectToVideoAdMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'title': obj.get<String>('title') ?? '',
+      'description': obj.get<String>('description') ?? '',
+      'videoUrl': obj.get<String>('videoUrl') ?? '',
+      'thumbnailUrl': obj.get<String>('thumbnailUrl'),
+      'advertiserName': obj.get<String>('advertiserName') ?? '',
+      'scheduleStart': obj.get<String>('scheduleStart') ?? '',
+      'scheduleEnd': obj.get<String>('scheduleEnd') ?? '',
+      'pricePesewas': obj.get<int>('pricePesewas') ?? 0,
+      'pricingTier': obj.get<String>('pricingTier') ?? 'daily',
+      'sortOrder': obj.get<int>('sortOrder') ?? 0,
+      'status': obj.get<String>('status') ?? 'active',
+      'impressions': obj.get<int>('impressions') ?? 0,
+      'clicks': obj.get<int>('clicks') ?? 0,
+      'createdBy': obj.get<String>('createdBy') ?? '',
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+    };
+  }
+
   // ============ KYC (Smile ID) ============
 
   /// Save KYC job ID after selfie+ID capture, set status to pending
