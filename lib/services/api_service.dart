@@ -1151,8 +1151,8 @@ class ApiService {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.videoAdClass))
       ..whereEqualTo('status', 'active')
-      ..whereLessThanOrEqualTo('scheduleStart', now)
-      ..whereGreaterThanOrEqualTo('scheduleEnd', now)
+      ..whereLessThanOrEqualsTo('scheduleStart', now)
+      ..whereGreaterThanOrEqualsTo('scheduleEnd', now)
       ..orderByAscending('sortOrder');
 
     final response = await query.query();
