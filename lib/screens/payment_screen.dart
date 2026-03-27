@@ -13,67 +13,50 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  int _selectedTierIndex = 0;
   String _paymentMethod = 'mobile_money';
   final _phoneController = TextEditingController();
   final _referenceController = TextEditingController();
+  final _cashReceiptController = TextEditingController();
   bool _isProcessing = false;
   bool _paymentComplete = false;
 
-  // Customizable payment tiers — admin can adjust these in Back4App config
-  static const List<Map<String, dynamic>> _paymentTiers = [
-    {
-      'name': 'Basic',
-      'price': 20.00,
-      'currency': 'GHS',
-      'duration': '7 days',
-      'features': [
-        'Visible for 7 days',
-        'Standard listing',
-        'Up to 10 applications',
-      ],
-      'color': AppColors.blue500,
-    },
-    {
-      'name': 'Standard',
-      'price': 50.00,
-      'currency': 'GHS',
-      'duration': '14 days',
-      'features': [
-        'Visible for 14 days',
-        'Priority listing',
-        'Unlimited applications',
-        'Featured in search results',
-      ],
-      'color': AppColors.amber600,
-    },
-    {
-      'name': 'Premium',
-      'price': 100.00,
-      'currency': 'GHS',
-      'duration': '30 days',
-      'features': [
-        'Visible for 30 days',
-        'Top priority listing',
-        'Unlimited applications',
-        'Featured on home page',
-        'Highlighted badge',
-      ],
-      'color': AppColors.purple600,
-    },
-  ];
+  // Fixed charges
+  static const double _postingFee = 100.00; // GHS
+  static const double _vatRate = 0.15; // 15% Ghana VAT (NHIL + GETFund + VAT)
+  static const double _platformFeeRate = 0.025; // 2.5%
+
+  double get _vatAmount => _postingFee * _vatRate;
+  double get _platformFee => _postingFee * _platformFeeRate;
+  double get _totalAmount => _postingFee + _vatAmount + _platformFee;
 
   @override
   void dispose() {
     _phoneController.dispose();
     _referenceController.dispose();
+    _cashReceiptController.dispose();
     super.dispose();
   }
 
   Future<void> _processPayment() async {
-    if (_paymentMethod == 'mobile_money' && _phoneController.text.trim().isEmpty) {
+    if (_paymentMethod == 'mobile_money' &&
+        _phoneController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your mobile money number')),
+      );
+      return;
+    }
+    if (_paymentMethod == 'bank_transfer' &&
+        _referenceController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Please enter your bank transfer reference')),
+      );
+      return;
+    }
+    if (_paymentMethod == 'cash' &&
+        _cashReceiptController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your cash receipt number')),
       );
       return;
     }
@@ -81,18 +64,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
     setState(() => _isProcessing = true);
 
     try {
-      final tier = _paymentTiers[_selectedTierIndex];
-
-      // Record payment in Back4App
       await ApiService.recordPayment(
         jobId: widget.job.id,
-        amount: (tier['price'] as double).toInt(),
-        currency: tier['currency'] as String,
+        amount: _totalAmount.round(),
+        currency: 'GHS',
         paymentMethod: _paymentMethod,
-        paymentTier: tier['name'] as String,
-        duration: tier['duration'] as String,
-        phone: _phoneController.text.trim(),
-        reference: _referenceController.text.trim(),
+        paymentTier: 'gig_posting',
+        duration: '30 days',
+        phone: _paymentMethod == 'mobile_money'
+            ? _phoneController.text.trim()
+            : null,
+        reference: _paymentMethod == 'bank_transfer'
+            ? _referenceController.text.trim()
+            : _paymentMethod == 'cash'
+                ? _cashReceiptController.text.trim()
+                : null,
       );
 
       // Activate the job so it goes live
@@ -133,17 +119,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Job summary header
             _buildJobSummary(),
-
-            // Payment tiers
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Charges breakdown
                   const Text(
-                    'Choose a Plan',
+                    'Gig Posting Charges',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -152,18 +136,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Select how long your gig stays live',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.gray500,
-                    ),
+                    'All charges are required before your gig goes live',
+                    style: TextStyle(fontSize: 14, color: AppColors.gray500),
                   ),
                   const SizedBox(height: 16),
-
-                  // Tier cards
-                  ...List.generate(_paymentTiers.length, (index) {
-                    return _buildTierCard(index);
-                  }),
+                  _buildChargesBreakdown(),
 
                   const SizedBox(height: 24),
 
@@ -181,15 +158,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Payment details form
+                  // Payment form
                   _buildPaymentForm(),
 
                   const SizedBox(height: 24),
 
-                  // Order summary
-                  _buildOrderSummary(),
+                  // Final total
+                  _buildTotalBanner(),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
                   // Pay button
                   SizedBox(
@@ -214,7 +191,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               ),
                             )
                           : Text(
-                              'Pay GHS ${(_paymentTiers[_selectedTierIndex]['price'] as double).toStringAsFixed(2)}',
+                              'Pay GHS ${_totalAmount.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -225,7 +202,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
                   const SizedBox(height: 12),
 
-                  // Skip for now (optional)
+                  // Save as draft
                   Center(
                     child: TextButton(
                       onPressed: () {
@@ -244,8 +221,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               ),
                               TextButton(
                                 onPressed: () {
-                                  Navigator.pop(context); // close dialog
-                                  Navigator.pop(context, false); // back to home
+                                  Navigator.pop(context);
+                                  Navigator.pop(context, false);
                                 },
                                 child: const Text('Save as Draft'),
                               ),
@@ -285,44 +262,28 @@ class _PaymentScreenState extends State<PaymentScreen> {
           const Text(
             'Your Gig',
             style: TextStyle(
-              fontSize: 12,
-              color: Colors.white70,
-              fontWeight: FontWeight.w500,
-            ),
+                fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 4),
           Text(
             widget.job.title,
             style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+                fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           const SizedBox(height: 8),
           Row(
             children: [
               const Icon(Icons.business, size: 14, color: Colors.white70),
               const SizedBox(width: 4),
-              Text(
-                widget.job.company,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.white70,
-                ),
-              ),
+              Text(widget.job.company,
+                  style: const TextStyle(fontSize: 13, color: Colors.white70)),
               const SizedBox(width: 16),
               const Icon(Icons.location_on, size: 14, color: Colors.white70),
               const SizedBox(width: 4),
               Expanded(
-                child: Text(
-                  widget.job.location,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.white70,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: Text(widget.job.location,
+                    style: const TextStyle(fontSize: 13, color: Colors.white70),
+                    overflow: TextOverflow.ellipsis),
               ),
             ],
           ),
@@ -336,10 +297,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             child: Text(
               'Pay: ${widget.job.salary}',
               style: const TextStyle(
-                fontSize: 13,
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-              ),
+                  fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -347,145 +305,108 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Widget _buildTierCard(int index) {
-    final tier = _paymentTiers[index];
-    final isSelected = _selectedTierIndex == index;
-    final tierColor = tier['color'] as Color;
-    final isPopular = index == 1; // Standard is "popular"
-
-    return GestureDetector(
-      onTap: () => setState(() => _selectedTierIndex = index),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected ? tierColor.withOpacity(0.05) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? tierColor : AppColors.gray200,
-            width: isSelected ? 2 : 1,
+  Widget _buildChargesBreakdown() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.gray200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: tierColor.withOpacity(0.15),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                // Radio indicator
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected ? tierColor : AppColors.gray400,
-                      width: 2,
-                    ),
-                  ),
-                  child: isSelected
-                      ? Center(
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: tierColor,
-                            ),
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            tier['name'] as String,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isSelected ? tierColor : AppColors.gray900,
-                            ),
-                          ),
-                          if (isPopular) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.amber500,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Text(
-                                'Popular',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      Text(
-                        tier['duration'] as String,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.gray500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  'GHS ${(tier['price'] as double).toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: isSelected ? tierColor : AppColors.gray800,
-                  ),
-                ),
-              ],
-            ),
-            if (isSelected) ...[
-              const SizedBox(height: 12),
-              const Divider(height: 1),
-              const SizedBox(height: 12),
-              ...((tier['features'] as List<String>).map((feature) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle, size: 16, color: tierColor),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            feature,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.gray700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ))),
-            ],
-          ],
-        ),
+        ],
       ),
+      child: Column(
+        children: [
+          _buildChargeRow(
+            icon: Icons.work_outline,
+            label: 'Gig Posting Fee',
+            amount: _postingFee,
+            description: 'Standard posting fee for 30 days',
+          ),
+          const Divider(height: 20),
+          _buildChargeRow(
+            icon: Icons.receipt_long,
+            label: 'VAT (${(_vatRate * 100).toStringAsFixed(0)}%)',
+            amount: _vatAmount,
+            description: 'Ghana Revenue Authority — NHIL, GETFund & VAT',
+          ),
+          const Divider(height: 20),
+          _buildChargeRow(
+            icon: Icons.account_balance,
+            label: 'Platform Fee (${(_platformFeeRate * 100).toStringAsFixed(1)}%)',
+            amount: _platformFee,
+            description: 'Akwaaba Gigs service charge',
+          ),
+          const Divider(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Total Due',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.gray900),
+              ),
+              Text(
+                'GHS ${_totalAmount.toStringAsFixed(2)}',
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.amber700),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChargeRow({
+    required IconData icon,
+    required String label,
+    required double amount,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppColors.amber50,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: AppColors.amber600),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, color: AppColors.gray800)),
+              Text(description,
+                  style: const TextStyle(
+                      fontSize: 11, color: AppColors.gray500)),
+            ],
+          ),
+        ),
+        Text(
+          'GHS ${amount.toStringAsFixed(2)}',
+          style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: AppColors.gray900),
+        ),
+      ],
     );
   }
 
@@ -497,6 +418,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
           icon: Icons.phone_android,
           label: 'Mobile Money',
           subtitle: 'MTN, Vodafone, AirtelTigo',
+        ),
+        const SizedBox(height: 8),
+        _buildPaymentMethodOption(
+          value: 'cash',
+          icon: Icons.payments_outlined,
+          label: 'Cash Payment',
+          subtitle: 'Pay at an authorized agent',
         ),
         const SizedBox(height: 8),
         _buildPaymentMethodOption(
@@ -542,31 +470,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     : AppColors.gray100,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: isSelected ? AppColors.amber600 : AppColors.gray500,
-              ),
+              child: Icon(icon,
+                  size: 20,
+                  color: isSelected ? AppColors.amber600 : AppColors.gray500),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? AppColors.amber700 : AppColors.gray800,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.gray500,
-                    ),
-                  ),
+                  Text(label,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? AppColors.amber700
+                              : AppColors.gray800)),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.gray500)),
                 ],
               ),
             ),
@@ -576,9 +497,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected ? AppColors.amber500 : AppColors.gray400,
-                  width: 2,
-                ),
+                    color: isSelected ? AppColors.amber500 : AppColors.gray400,
+                    width: 2),
               ),
               child: isSelected
                   ? Center(
@@ -586,9 +506,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         width: 10,
                         height: 10,
                         decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.amber500,
-                        ),
+                            shape: BoxShape.circle, color: AppColors.amber500),
                       ),
                     )
                   : null,
@@ -600,85 +518,176 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Widget _buildPaymentForm() {
-    if (_paymentMethod == 'mobile_money') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: 'Mobile Money Number',
-              hintText: 'e.g., 024 XXX XXXX',
-              prefixIcon: const Icon(Icons.phone, color: AppColors.amber600),
-              filled: true,
-              fillColor: AppColors.gray100,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    const BorderSide(color: AppColors.amber500, width: 2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'You will receive a payment prompt on this number.',
-            style: TextStyle(fontSize: 12, color: AppColors.gray500),
-          ),
-        ],
-      );
-    } else {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.amber50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.amber400.withOpacity(0.3)),
-        ),
-        child: Column(
+    switch (_paymentMethod) {
+      case 'mobile_money':
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Bank Transfer Details',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: AppColors.amber900,
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Mobile Money Number',
+                hintText: 'e.g., 024 XXX XXXX',
+                prefixIcon:
+                    const Icon(Icons.phone, color: AppColors.amber600),
+                filled: true,
+                fillColor: AppColors.gray100,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: AppColors.amber500, width: 2)),
               ),
             ),
             const SizedBox(height: 8),
-            _buildBankDetailRow('Bank', 'GCB Bank'),
-            _buildBankDetailRow('Account Name', 'Akwaaba Gigs Ltd'),
-            _buildBankDetailRow('Account No.', '1234567890'),
-            _buildBankDetailRow('Branch', 'Accra Main'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _referenceController,
-              decoration: InputDecoration(
-                labelText: 'Transaction Reference',
-                hintText: 'Enter your bank transfer reference',
-                prefixIcon: const Icon(Icons.receipt_long,
-                    color: AppColors.amber600),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: AppColors.amber500, width: 2),
-                ),
-              ),
+            const Text(
+              'You will receive a payment prompt on this number.',
+              style: TextStyle(fontSize: 12, color: AppColors.gray500),
             ),
           ],
-        ),
-      );
+        );
+
+      case 'cash':
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.green50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: AppColors.emerald500.withOpacity(0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.payments, size: 20, color: AppColors.emerald700),
+                  SizedBox(width: 8),
+                  Text('Cash Payment Instructions',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.emerald700)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildCashStep(
+                  '1', 'Visit any Akwaaba Gigs authorized agent'),
+              _buildCashStep('2',
+                  'Pay GHS ${_totalAmount.toStringAsFixed(2)} and collect your receipt'),
+              _buildCashStep(
+                  '3', 'Enter the receipt number below to confirm'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _cashReceiptController,
+                decoration: InputDecoration(
+                  labelText: 'Cash Receipt Number',
+                  hintText: 'e.g., AKW-2024-XXXXX',
+                  prefixIcon: const Icon(Icons.receipt,
+                      color: AppColors.emerald600),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: AppColors.emerald500, width: 2)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your gig will go live once the receipt is verified.',
+                style: TextStyle(fontSize: 12, color: AppColors.gray500),
+              ),
+            ],
+          ),
+        );
+
+      case 'bank_transfer':
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.amber50,
+            borderRadius: BorderRadius.circular(12),
+            border:
+                Border.all(color: AppColors.amber400.withOpacity(0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Bank Transfer Details',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.amber900)),
+              const SizedBox(height: 8),
+              _buildBankDetailRow('Bank', 'GCB Bank'),
+              _buildBankDetailRow('Account Name', 'Akwaaba Gigs Ltd'),
+              _buildBankDetailRow('Account No.', '1234567890'),
+              _buildBankDetailRow('Branch', 'Accra Main'),
+              _buildBankDetailRow(
+                  'Amount', 'GHS ${_totalAmount.toStringAsFixed(2)}'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _referenceController,
+                decoration: InputDecoration(
+                  labelText: 'Transaction Reference',
+                  hintText: 'Enter your bank transfer reference',
+                  prefixIcon: const Icon(Icons.receipt_long,
+                      color: AppColors.amber600),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: AppColors.amber500, width: 2)),
+                ),
+              ),
+            ],
+          ),
+        );
+
+      default:
+        return const SizedBox.shrink();
     }
+  }
+
+  Widget _buildCashStep(String number, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: AppColors.emerald600,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Center(
+              child: Text(number,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(
+                    fontSize: 13, color: AppColors.gray700)),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBankDetailRow(String label, String value) {
@@ -688,84 +697,52 @@ class _PaymentScreenState extends State<PaymentScreen> {
         children: [
           SizedBox(
             width: 110,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.gray600,
-              ),
-            ),
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 13, color: AppColors.gray600)),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.gray900,
-              ),
-            ),
+            child: Text(value,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.gray900)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildOrderSummary() {
-    final tier = _paymentTiers[_selectedTierIndex];
+  Widget _buildTotalBanner() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.gray100,
+        gradient: const LinearGradient(
+          colors: [AppColors.amber500, AppColors.amber700],
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Plan', style: TextStyle(color: AppColors.gray600)),
-              Text(
-                '${tier['name']} (${tier['duration']})',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
+              Text('Total Amount Due',
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500)),
+              Text('Includes VAT & platform fee',
+                  style: TextStyle(color: Colors.white60, fontSize: 10)),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Gig', style: TextStyle(color: AppColors.gray600)),
-              Flexible(
-                child: Text(
-                  widget.job.title,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Total',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                'GHS ${(tier['price'] as double).toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.amber700,
-                ),
-              ),
-            ],
+          Text(
+            'GHS ${_totalAmount.toStringAsFixed(2)}',
+            style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white),
           ),
         ],
       ),
@@ -792,34 +769,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       color: AppColors.emerald500.withOpacity(0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.check_circle,
-                      size: 48,
-                      color: AppColors.emerald500,
-                    ),
+                    child: const Icon(Icons.check_circle,
+                        size: 48, color: AppColors.emerald500),
                   ),
                   const SizedBox(height: 24),
-                  const Text(
-                    'Payment Successful!',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.gray900,
-                    ),
-                  ),
+                  const Text('Payment Successful!',
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.gray900)),
                   const SizedBox(height: 8),
                   const Text(
                     'Your gig is now live on Akwaaba Gigs',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.gray600,
-                    ),
+                    style: TextStyle(fontSize: 14, color: AppColors.gray600),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                        horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -827,21 +795,30 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     ),
                     child: Column(
                       children: [
-                        Text(
-                          widget.job.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.gray900,
-                          ),
-                          textAlign: TextAlign.center,
+                        Text(widget.job.title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.gray900),
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 6),
+                        _buildReceiptRow('Posting Fee', 'GHS ${_postingFee.toStringAsFixed(2)}'),
+                        _buildReceiptRow(
+                            'VAT (${(_vatRate * 100).toStringAsFixed(0)}%)',
+                            'GHS ${_vatAmount.toStringAsFixed(2)}'),
+                        _buildReceiptRow(
+                            'Platform Fee',
+                            'GHS ${_platformFee.toStringAsFixed(2)}'),
+                        const Divider(height: 12),
+                        _buildReceiptRow(
+                          'Total Paid',
+                          'GHS ${_totalAmount.toStringAsFixed(2)}',
+                          bold: true,
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${_paymentTiers[_selectedTierIndex]['name']} plan — ${_paymentTiers[_selectedTierIndex]['duration']}',
+                          'Paid via ${_paymentMethodLabel()}',
                           style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.gray500,
-                          ),
+                              fontSize: 11, color: AppColors.gray500),
                         ),
                       ],
                     ),
@@ -850,21 +827,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () {
-                        Navigator.pop(context, true);
-                      },
+                      onPressed: () => Navigator.pop(context, true),
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.amber600,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text(
-                        'Done',
-                        style: TextStyle(fontSize: 16),
-                      ),
+                      child: const Text('Done',
+                          style: TextStyle(fontSize: 16)),
                     ),
                   ),
                 ],
@@ -874,5 +846,39 @@ class _PaymentScreenState extends State<PaymentScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildReceiptRow(String label, String value, {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.gray600,
+                  fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: bold ? AppColors.amber700 : AppColors.gray900,
+                  fontWeight: bold ? FontWeight.bold : FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  String _paymentMethodLabel() {
+    switch (_paymentMethod) {
+      case 'mobile_money':
+        return 'Mobile Money';
+      case 'cash':
+        return 'Cash Payment';
+      case 'bank_transfer':
+        return 'Bank Transfer';
+      default:
+        return _paymentMethod;
+    }
   }
 }
