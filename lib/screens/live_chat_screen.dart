@@ -34,12 +34,18 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   final ScrollController _scrollController = ScrollController();
   final FocusNode _inputFocusNode = FocusNode();
 
+  /// Combined list of server messages and optimistic local messages.
+  /// Local (unsaved) messages use a temporary ID prefixed with '_local_'.
   List<ParseObject> _messages = [];
+  final Map<String, String> _localToServerIds = {};
+  final Set<String> _failedMessageIds = {};
+
   bool _isLoading = true;
   bool _isSending = false;
   bool _hasMoreHistory = true;
   bool _isLoadingMore = false;
   bool _showScrollToBottom = false;
+  String _currentUserId = '';
 
   LiveQuery? _liveQuery;
   Subscription? _messageSubscription;
@@ -51,6 +57,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   @override
   void initState() {
     super.initState();
+    _currentUserId = context.read<AuthProvider>().user?.id ?? '';
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
     _loadMessages();
@@ -209,11 +216,23 @@ class _LiveChatScreenState extends State<LiveChatScreen>
       // New message from either party
       _messageSubscription!.on(LiveQueryEvent.create, (value) {
         if (!mounted) return;
-        final exists = _messages.any((m) => m.objectId == value.objectId);
+        final serverId = value.objectId;
+
+        // Check if this is our own message echoed back (reconcile with optimistic)
+        final localId = _localToServerIds.entries
+            .where((e) => e.value == serverId)
+            .map((e) => e.key)
+            .firstOrNull;
+        if (localId != null) {
+          // Already reconciled in _sendMessage, skip
+          return;
+        }
+
+        // Check if already present by server ID
+        final exists = _messages.any((m) => m.objectId == serverId);
         if (!exists) {
           setState(() => _messages.add(value));
           _markSingleMessageRead(value);
-          // Auto-scroll only if user is near bottom
           if (!_showScrollToBottom) {
             WidgetsBinding.instance
                 .addPostFrameCallback((_) => _scrollToBottom());
@@ -259,8 +278,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   // ============ READ RECEIPTS ============
 
   void _markMessagesAsRead() async {
-    final currentUserId =
-        context.read<AuthProvider>().user?.id ?? '';
+    final currentUserId = _currentUserId;
     for (final msg in _messages) {
       if (msg.get<String>('senderId') != currentUserId &&
           msg.get<bool>('isRead') != true) {
@@ -270,8 +288,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   }
 
   void _markSingleMessageRead(ParseObject msg) async {
-    final currentUserId =
-        context.read<AuthProvider>().user?.id ?? '';
+    final currentUserId = _currentUserId;
     if (msg.get<String>('senderId') != currentUserId &&
         msg.get<bool>('isRead') != true) {
       final update = ParseObject(Back4AppConfig.messageClass)
@@ -281,24 +298,40 @@ class _LiveChatScreenState extends State<LiveChatScreen>
     }
   }
 
-  // ============ SEND ============
+  // ============ SEND (Optimistic UI) ============
 
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
-    if (text.isEmpty || _isSending) return;
+    if (text.isEmpty) return;
 
-    setState(() => _isSending = true);
     _controller.clear();
 
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) return;
+
+    final senderName =
+        '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'
+            .trim();
+
+    // 1. Create a local optimistic message and show it IMMEDIATELY
+    final localId = '_local_${DateTime.now().microsecondsSinceEpoch}';
+    final localMsg = ParseObject(Back4AppConfig.messageClass)
+      ..set('chatRoomId', _chatRoomId)
+      ..set('conversationId', _chatRoomId)
+      ..set('senderId', user.objectId)
+      ..set('senderName', senderName)
+      ..set('content', text)
+      ..set('isRead', false)
+      ..set('_localId', localId);
+    // Fake the objectId so the list can track it
+    localMsg.objectId = localId;
+
+    setState(() => _messages.add(localMsg));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+
+    // 2. Save to Back4App in the background
     try {
-      final user = await ParseUser.currentUser() as ParseUser?;
-      if (user == null) throw Exception('Not authenticated');
-
-      final senderName =
-          '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'
-              .trim();
-
-      final message = ParseObject(Back4AppConfig.messageClass)
+      final serverMsg = ParseObject(Back4AppConfig.messageClass)
         ..set('chatRoomId', _chatRoomId)
         ..set('conversationId', _chatRoomId)
         ..set('senderId', user.objectId)
@@ -306,26 +339,49 @@ class _LiveChatScreenState extends State<LiveChatScreen>
         ..set('content', text)
         ..set('isRead', false);
 
-      final response = await message.save();
+      final response = await serverMsg.save();
       if (response.success && response.result != null) {
-        final newMsg = response.result as ParseObject;
-        final exists = _messages.any((m) => m.objectId == newMsg.objectId);
-        if (!exists) {
-          setState(() => _messages.add(newMsg));
+        final saved = response.result as ParseObject;
+        // 3. Replace local message with server-confirmed one
+        if (mounted) {
+          _localToServerIds[localId] = saved.objectId!;
+          setState(() {
+            final idx = _messages.indexWhere((m) => m.objectId == localId);
+            if (idx >= 0) {
+              _messages[idx] = saved;
+            }
+          });
         }
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _scrollToBottom());
+      } else {
+        _markAsFailed(localId);
       }
     } catch (e) {
-      _controller.text = text;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send: $e')),
-        );
-      }
+      _markAsFailed(localId);
     }
+  }
 
-    if (mounted) setState(() => _isSending = false);
+  void _markAsFailed(String localId) {
+    if (mounted) {
+      setState(() => _failedMessageIds.add(localId));
+    }
+  }
+
+  Future<void> _retryMessage(String localId) async {
+    final idx = _messages.indexWhere((m) => m.objectId == localId);
+    if (idx < 0) return;
+
+    final msg = _messages[idx];
+    final text = msg.get<String>('content') ?? '';
+
+    // Remove failed message
+    setState(() {
+      _messages.removeAt(idx);
+      _failedMessageIds.remove(localId);
+    });
+
+    // Re-insert text and resend
+    _controller.text = text;
+    _sendMessage();
   }
 
   void _scrollToBottom({bool animated = true}) {
@@ -346,8 +402,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
 
   @override
   Widget build(BuildContext context) {
-    final currentUserId =
-        context.watch<AuthProvider>().user?.id ?? '';
+    final currentUserId = _currentUserId;
 
     return Scaffold(
       appBar: AppBar(
@@ -620,6 +675,9 @@ class _LiveChatScreenState extends State<LiveChatScreen>
     final senderName = msg.get<String>('senderName') ?? '';
     final createdAt = msg.createdAt ?? DateTime.now();
     final isRead = msg.get<bool>('isRead') ?? false;
+    final msgId = msg.objectId ?? '';
+    final isLocal = msgId.startsWith('_local_');
+    final isFailed = _failedMessageIds.contains(msgId);
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -631,7 +689,13 @@ class _LiveChatScreenState extends State<LiveChatScreen>
         padding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isMe ? const Color(0xFF4CAF50) : AppColors.gray100,
+          color: isMe
+              ? isFailed
+                  ? const Color(0xFFE57373) // red for failed
+                  : isLocal
+                      ? const Color(0xFF81C784) // lighter green for sending
+                      : const Color(0xFF4CAF50) // green for sent
+              : AppColors.gray100,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -659,22 +723,46 @@ class _LiveChatScreenState extends State<LiveChatScreen>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Timestamp (use current time for local messages)
                 Text(timeFormat.format(createdAt),
                     style: TextStyle(
                         fontSize: 10,
                         color: isMe
                             ? Colors.white70
                             : AppColors.gray500)),
-                // Read receipt for own messages
+                // Status indicator for own messages
                 if (isMe) ...[
                   const SizedBox(width: 4),
-                  Icon(
-                    isRead ? Icons.done_all : Icons.done,
-                    size: 14,
-                    color: isRead
-                        ? Colors.white
-                        : Colors.white70,
-                  ),
+                  if (isFailed)
+                    GestureDetector(
+                      onTap: () => _retryMessage(msgId),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline,
+                              size: 14, color: Colors.white),
+                          SizedBox(width: 2),
+                          Text('Retry',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    )
+                  else if (isLocal)
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 1.5, color: Colors.white70),
+                    )
+                  else
+                    Icon(
+                      isRead ? Icons.done_all : Icons.done,
+                      size: 14,
+                      color: isRead ? Colors.white : Colors.white70,
+                    ),
                 ],
               ],
             ),
