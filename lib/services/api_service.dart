@@ -78,6 +78,55 @@ class ApiService {
     }
   }
 
+  // ============ PASSWORD & ACCOUNT RECOVERY ============
+
+  /// Send a password reset email via Parse Server.
+  static Future<void> requestPasswordReset(String email) async {
+    final response =
+        await ParseUser(null, null, email).requestPasswordReset();
+    if (!response.success) {
+      throw Exception(
+          response.error?.message ?? 'Failed to send reset email');
+    }
+  }
+
+  /// Change the current user's password.
+  static Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    // Verify current password by attempting login
+    final verifyResponse = await ParseUser(
+            user.username, currentPassword, user.emailAddress)
+        .login();
+    if (!verifyResponse.success) {
+      throw Exception('Current password is incorrect');
+    }
+
+    // Set new password
+    user.password = newPassword;
+    final saveResponse = await user.save();
+    if (!saveResponse.success) {
+      throw Exception(
+          saveResponse.error?.message ?? 'Failed to change password');
+    }
+  }
+
+  /// Get the current user's username/email for display.
+  static Future<Map<String, String>> getAccountInfo() async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+
+    return {
+      'username': user.username ?? '',
+      'email': user.emailAddress ?? '',
+      'userId': user.objectId ?? '',
+    };
+  }
+
   // ============ JOBS ============
 
   static Future<List<Job>> getJobs() async {
