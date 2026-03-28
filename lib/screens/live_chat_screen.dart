@@ -1,13 +1,19 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
-import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../config/back4app_config.dart';
 import '../providers/auth_provider.dart';
+import '../providers/back4app_chat_provider.dart';
 import '../utils/colors.dart';
 
+/// Real-time chat screen built on the Flutter AI Toolkit's [LlmChatView].
+///
+/// Uses [Back4AppChatProvider] as a custom [LlmProvider] that bridges
+/// the toolkit's polished chat UI to Back4App Parse messaging with
+/// LiveQuery for instant delivery.
+///
+/// Activation: This screen is only reachable AFTER the gig poster
+/// accepts the seeker's bid (Job.chatEnabled == true), enforced by
+/// [AsyncChatButton] on the job details screen.
 class LiveChatScreen extends StatefulWidget {
   final String jobId;
   final String jobTitle;
@@ -25,152 +31,38 @@ class LiveChatScreen extends StatefulWidget {
 }
 
 class _LiveChatScreenState extends State<LiveChatScreen> {
-  final TextEditingController _controller = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  List<ParseObject> _messages = [];
-  bool _isLoading = true;
-  bool _isSending = false;
-  LiveQuery? _liveQuery;
-  Subscription? _messageSubscription;
-
-  String get _chatRoomId => 'chat_${widget.jobId}';
+  Back4AppChatProvider? _chatProvider;
+  bool _isInitializing = true;
 
   @override
   void initState() {
     super.initState();
-    _loadMessages();
-    _setupLiveQuery();
+    _initProvider();
+  }
+
+  Future<void> _initProvider() async {
+    final auth = context.read<AuthProvider>();
+    final userId = auth.user?.id ?? '';
+    final userName = auth.user?.fullName ?? 'User';
+
+    _chatProvider = Back4AppChatProvider(
+      chatRoomId: 'chat_${widget.jobId}',
+      currentUserId: userId,
+      currentUserName: userName,
+      otherPartyName: widget.otherPartyName,
+    );
+
+    if (mounted) setState(() => _isInitializing = false);
   }
 
   @override
   void dispose() {
-    _unsubscribeLiveQuery();
-    _controller.dispose();
-    _scrollController.dispose();
+    _chatProvider?.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadMessages() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final query = QueryBuilder<ParseObject>(
-          ParseObject(Back4AppConfig.messageClass))
-        ..whereEqualTo('chatRoomId', _chatRoomId)
-        ..orderByAscending('createdAt');
-
-      final response = await query.query();
-      if (response.success && response.results != null) {
-        _messages = response.results!.cast<ParseObject>();
-      }
-
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load messages: $e')),
-        );
-      }
-    }
-
-    if (mounted) setState(() => _isLoading = false);
-  }
-
-  Future<void> _setupLiveQuery() async {
-    try {
-      _liveQuery = LiveQuery();
-      final query = QueryBuilder<ParseObject>(
-          ParseObject(Back4AppConfig.messageClass))
-        ..whereEqualTo('chatRoomId', _chatRoomId);
-
-      _messageSubscription = await _liveQuery!.client.subscribe(query);
-
-      _messageSubscription!.on(LiveQueryEvent.create, (value) {
-        if (mounted) {
-          // Only add if not already present (avoid duplicates from own sends)
-          final exists =
-              _messages.any((m) => m.objectId == value.objectId);
-          if (!exists) {
-            setState(() => _messages.add(value));
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => _scrollToBottom());
-          }
-        }
-      });
-    } catch (e) {
-      // LiveQuery not available — fall back to polling
-      debugPrint('LiveQuery setup failed: $e');
-    }
-  }
-
-  void _unsubscribeLiveQuery() {
-    if (_liveQuery != null && _messageSubscription != null) {
-      _liveQuery!.client.unSubscribe(_messageSubscription!);
-    }
-  }
-
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
-  Future<void> _sendMessage() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty || _isSending) return;
-
-    setState(() => _isSending = true);
-    _controller.clear();
-
-    try {
-      final user = await ParseUser.currentUser() as ParseUser?;
-      if (user == null) throw Exception('Not authenticated');
-
-      final senderName =
-          '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'
-              .trim();
-
-      final message = ParseObject(Back4AppConfig.messageClass)
-        ..set('chatRoomId', _chatRoomId)
-        ..set('conversationId', _chatRoomId) // backward compat
-        ..set('senderId', user.objectId)
-        ..set('senderName', senderName)
-        ..set('content', text)
-        ..set('isRead', false);
-
-      final response = await message.save();
-      if (response.success && response.result != null) {
-        // Add locally if LiveQuery hasn't already
-        final newMsg = response.result as ParseObject;
-        final exists =
-            _messages.any((m) => m.objectId == newMsg.objectId);
-        if (!exists) {
-          setState(() => _messages.add(newMsg));
-        }
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _scrollToBottom());
-      }
-    } catch (e) {
-      _controller.text = text;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send: $e')),
-        );
-      }
-    }
-
-    if (mounted) setState(() => _isSending = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-    final currentUserId = authProvider.user?.id ?? '';
-
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -179,38 +71,23 @@ class _LiveChatScreenState extends State<LiveChatScreen> {
             Text(widget.otherPartyName),
             Text(
               'Re: ${widget.jobTitle}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.white.withOpacity(0.8),
-              ),
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
         ),
         backgroundColor: const Color(0xFF4CAF50),
         foregroundColor: Colors.white,
-        actions: [
+        actions: const [
           // Live indicator
           Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: EdgeInsets.only(right: 14),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.greenAccent,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Live',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                ),
+                _PulsingDot(),
+                SizedBox(width: 5),
+                Text('Live',
+                    style: TextStyle(fontSize: 11, color: Colors.white70)),
               ],
             ),
           ),
@@ -218,18 +95,18 @@ class _LiveChatScreenState extends State<LiveChatScreen> {
       ),
       body: Column(
         children: [
-          // Agreed amount banner
+          // Bid-agreed banner
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 8),
-            color: const Color(0xFF4CAF50).withOpacity(0.1),
-            child: Row(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4CAF50).withAlpha(25),
+            ),
+            child: const Row(
               children: [
-                const Icon(Icons.check_circle,
-                    size: 16, color: Color(0xFF4CAF50)),
-                const SizedBox(width: 8),
-                const Text(
+                Icon(Icons.check_circle, size: 16, color: Color(0xFF4CAF50)),
+                SizedBox(width: 8),
+                Text(
                   'Bid agreed — chat active',
                   style: TextStyle(
                     fontSize: 12,
@@ -240,169 +117,102 @@ class _LiveChatScreenState extends State<LiveChatScreen> {
               ],
             ),
           ),
-          // Messages
+          // Chat view
           Expanded(
-            child: _isLoading
+            child: _isInitializing || _chatProvider == null
                 ? const Center(
                     child: CircularProgressIndicator(
                         color: Color(0xFF4CAF50)))
-                : _messages.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.chat_bubble_outline,
-                                size: 64, color: AppColors.gray400),
-                            const SizedBox(height: 16),
-                            const Text('No messages yet'),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Start the conversation!',
-                              style: TextStyle(
-                                  color: AppColors.gray500, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final msg = _messages[index];
-                          final isMe =
-                              msg.get<String>('senderId') == currentUserId;
-                          return _buildBubble(msg, isMe);
-                        },
-                      ),
-          ),
-          // Input bar
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                top: BorderSide(color: AppColors.gray200),
-              ),
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      decoration: InputDecoration(
-                        hintText: 'Type a message...',
-                        filled: true,
-                        fillColor: AppColors.gray100,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      maxLines: null,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
+                : LlmChatView(
+                    provider: _chatProvider!,
+                    welcomeMessage:
+                        'Chat with ${widget.otherPartyName} about "${widget.jobTitle}". '
+                        'Messages are delivered in real-time.',
+                    style: _buildChatStyle(),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF4CAF50),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: _isSending ? null : _sendMessage,
-                      icon: _isSending
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.send, color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBubble(ParseObject msg, bool isMe) {
-    final timeFormat = DateFormat('h:mm a');
-    final content = msg.get<String>('content') ?? '';
-    final senderName = msg.get<String>('senderName') ?? '';
-    final createdAt = msg.createdAt ?? DateTime.now();
-
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+  LlmChatViewStyle _buildChatStyle() {
+    return LlmChatViewStyle(
+      backgroundColor: Colors.white,
+      // Action button (send) style
+      actionButtonStyle: ActionButtonStyle(
+        icon: Icons.send,
+        iconColor: Colors.white,
+        backgroundColor: const Color(0xFF4CAF50),
+        hoverColor: const Color(0xFF388E3C),
+      ),
+      // User message bubble
+      userMessageStyle: LlmMessageStyle(
         decoration: BoxDecoration(
-          color: isMe
-              ? const Color(0xFF4CAF50)
-              : AppColors.gray100,
+          color: const Color(0xFF4CAF50),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 16),
+            bottomLeft: const Radius.circular(16),
+            bottomRight: const Radius.circular(4),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
-        child: Column(
-          crossAxisAlignment:
-              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (!isMe)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  senderName,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.gray600,
-                  ),
-                ),
-              ),
-            Text(
-              content,
-              style: TextStyle(
-                color: isMe ? Colors.white : AppColors.gray900,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              timeFormat.format(createdAt),
-              style: TextStyle(
-                fontSize: 10,
-                color: isMe
-                    ? Colors.white.withOpacity(0.7)
-                    : AppColors.gray500,
-              ),
-            ),
-          ],
+        textStyle: const TextStyle(color: Colors.white, fontSize: 15),
+      ),
+      // Other party's message bubble (displayed as "llm" origin)
+      llmMessageStyle: LlmMessageStyle(
+        decoration: BoxDecoration(
+          color: AppColors.gray100,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: const Radius.circular(4),
+            bottomRight: const Radius.circular(16),
+          ),
+        ),
+        textStyle: const TextStyle(color: AppColors.gray900, fontSize: 15),
+      ),
+    );
+  }
+}
+
+/// Pulsing green dot for live indicator.
+class _PulsingDot extends StatefulWidget {
+  const _PulsingDot();
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.4, end: 1.0).animate(_controller),
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: Colors.greenAccent,
+          shape: BoxShape.circle,
         ),
       ),
     );
