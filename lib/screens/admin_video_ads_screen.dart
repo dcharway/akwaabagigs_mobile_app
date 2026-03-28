@@ -168,7 +168,7 @@ class _AdminVideoAdsScreenState extends State<AdminVideoAdsScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text('GHS ${priceGhs.toStringAsFixed(0)}',
+                    Text('GH₵${priceGhs.toStringAsFixed(0)}',
                         style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: AppColors.amber700)),
@@ -329,9 +329,9 @@ class _CreateVideoAdScreenState extends State<_CreateVideoAdScreen> {
   File? _videoFile;
 
   static const Map<String, Map<String, dynamic>> _pricingTiers = {
-    'daily': {'label': 'Daily', 'priceGhs': 50, 'desc': 'GHS 50/day'},
-    'weekly': {'label': 'Weekly', 'priceGhs': 250, 'desc': 'GHS 250/week'},
-    'monthly': {'label': 'Monthly', 'priceGhs': 800, 'desc': 'GHS 800/month'},
+    'daily': {'label': 'Daily', 'priceGhs': 50, 'desc': 'GH₵50/day'},
+    'weekly': {'label': 'Weekly', 'priceGhs': 250, 'desc': 'GH₵250/week'},
+    'monthly': {'label': 'Monthly', 'priceGhs': 800, 'desc': 'GH₵800/month'},
     'custom': {'label': 'Custom', 'priceGhs': 0, 'desc': 'Negotiable'},
   };
 
@@ -678,8 +678,8 @@ class _CreateVideoAdScreenState extends State<_CreateVideoAdScreen> {
                   controller: _customPriceController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Custom Price (GHS)',
-                    prefixText: 'GHS ',
+                    labelText: 'Custom Price (GH₵)',
+                    prefixText: 'GH₵ ',
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -714,7 +714,7 @@ class _CreateVideoAdScreenState extends State<_CreateVideoAdScreen> {
                       ],
                     ),
                     Text(
-                      'GHS ${_totalGhs.toStringAsFixed(2)}',
+                      'GH₵${_totalGhs.toStringAsFixed(2)}',
                       style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -745,7 +745,7 @@ class _CreateVideoAdScreenState extends State<_CreateVideoAdScreen> {
                               strokeWidth: 2,
                               color: Colors.white))
                       : Text(
-                          'Create Ad — GHS ${_totalGhs.toStringAsFixed(2)}',
+                          'Create Ad — GH₵${_totalGhs.toStringAsFixed(2)}',
                           style: const TextStyle(fontSize: 16)),
                 ),
               ),
@@ -896,7 +896,7 @@ class _EditVideoAdScreenState extends State<_EditVideoAdScreen> {
               controller: _priceController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                  labelText: 'Price (GHS)', prefixText: 'GHS '),
+                  labelText: 'Price (GH₵)', prefixText: 'GH₵ '),
             ),
             const SizedBox(height: 20),
             Row(

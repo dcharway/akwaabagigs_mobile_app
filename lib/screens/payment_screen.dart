@@ -191,7 +191,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               ),
                             )
                           : Text(
-                              'Pay GHS ${_totalAmount.toStringAsFixed(2)}',
+                              'Pay GH₵${_totalAmount.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -354,7 +354,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     color: AppColors.gray900),
               ),
               Text(
-                'GHS ${_totalAmount.toStringAsFixed(2)}',
+                'GH₵${_totalAmount.toStringAsFixed(2)}',
                 style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -400,7 +400,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         ),
         Text(
-          'GHS ${amount.toStringAsFixed(2)}',
+          'GH₵${amount.toStringAsFixed(2)}',
           style: const TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 15,
@@ -576,7 +576,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               _buildCashStep(
                   '1', 'Visit any Akwaaba Gigs authorized agent'),
               _buildCashStep('2',
-                  'Pay GHS ${_totalAmount.toStringAsFixed(2)} and collect your receipt'),
+                  'Pay GH₵${_totalAmount.toStringAsFixed(2)} and collect your receipt'),
               _buildCashStep(
                   '3', 'Enter the receipt number below to confirm'),
               const SizedBox(height: 12),
@@ -629,7 +629,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               _buildBankDetailRow('Account No.', '1234567890'),
               _buildBankDetailRow('Branch', 'Accra Main'),
               _buildBankDetailRow(
-                  'Amount', 'GHS ${_totalAmount.toStringAsFixed(2)}'),
+                  'Amount', 'GH₵${_totalAmount.toStringAsFixed(2)}'),
               const SizedBox(height: 12),
               TextField(
                 controller: _referenceController,
@@ -738,7 +738,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ],
           ),
           Text(
-            'GHS ${_totalAmount.toStringAsFixed(2)}',
+            'GH₵${_totalAmount.toStringAsFixed(2)}',
             style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -801,17 +801,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                 color: AppColors.gray900),
                             textAlign: TextAlign.center),
                         const SizedBox(height: 6),
-                        _buildReceiptRow('Posting Fee', 'GHS ${_postingFee.toStringAsFixed(2)}'),
+                        _buildReceiptRow('Posting Fee', 'GH₵${_postingFee.toStringAsFixed(2)}'),
                         _buildReceiptRow(
                             'VAT (${(_vatRate * 100).toStringAsFixed(0)}%)',
-                            'GHS ${_vatAmount.toStringAsFixed(2)}'),
+                            'GH₵${_vatAmount.toStringAsFixed(2)}'),
                         _buildReceiptRow(
                             'Platform Fee',
-                            'GHS ${_platformFee.toStringAsFixed(2)}'),
+                            'GH₵${_platformFee.toStringAsFixed(2)}'),
                         const Divider(height: 12),
                         _buildReceiptRow(
                           'Total Paid',
-                          'GHS ${_totalAmount.toStringAsFixed(2)}',
+                          'GH₵${_totalAmount.toStringAsFixed(2)}',
                           bold: true,
                         ),
                         const SizedBox(height: 4),

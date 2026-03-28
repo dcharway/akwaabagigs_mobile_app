@@ -93,7 +93,7 @@ class _EscrowScreenState extends State<EscrowScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Release Payment'),
         content: Text(
-          'Release GHS ${widget.job.escrowAmount} to the worker?\n\n'
+          'Release GH₵${widget.job.escrowAmount} to the worker?\n\n'
           'Service fee ($_serviceFeePercent%): GHS ${(widget.job.escrowAmount * _serviceFeePercent / 100).round()}\n'
           'Worker receives: GHS ${widget.job.escrowAmount - (widget.job.escrowAmount * _serviceFeePercent / 100).round()}\n\n'
           'This action cannot be undone.',
@@ -248,7 +248,7 @@ class _EscrowScreenState extends State<EscrowScreen> {
                           isReleased
                               ? 'Released'
                               : isFunded
-                                  ? 'Funded (GHS ${widget.job.escrowAmount})'
+                                  ? 'Funded (GH₵${widget.job.escrowAmount})'
                                   : 'Not funded',
                           style: TextStyle(
                             fontSize: 12,
@@ -310,7 +310,7 @@ class _EscrowScreenState extends State<EscrowScreen> {
                   onPressed: _isProcessing ? null : _releaseEscrow,
                   icon: const Icon(Icons.send),
                   label: Text(
-                      'Release GHS ${widget.job.escrowAmount} to Worker'),
+                      'Release GH₵${widget.job.escrowAmount} to Worker'),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.emerald600,
                     foregroundColor: Colors.white,
@@ -332,9 +332,9 @@ class _EscrowScreenState extends State<EscrowScreen> {
                 controller: _amountController,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: 'Amount (GHS)',
+                  labelText: 'Amount (GH₵)',
                   hintText: 'Enter payment amount',
-                  prefixIcon: const Icon(Icons.attach_money,
+                  prefixIcon: const Icon(Icons.payments_outlined,
                       color: AppColors.amber600),
                   filled: true,
                   fillColor: AppColors.gray100,
@@ -379,7 +379,7 @@ class _EscrowScreenState extends State<EscrowScreen> {
                               style: TextStyle(
                                   color: AppColors.gray600)),
                           Text(
-                              'GHS ${_amountController.text}',
+                              'GH₵${_amountController.text}',
                               style: const TextStyle(
                                   fontWeight: FontWeight.w600)),
                         ],
@@ -395,7 +395,7 @@ class _EscrowScreenState extends State<EscrowScreen> {
                                   color: AppColors.gray600,
                                   fontSize: 12)),
                           Text(
-                            'GHS ${((int.tryParse(_amountController.text) ?? 0) * _serviceFeePercent / 100).round()}',
+                            'GH₵${((int.tryParse(_amountController.text) ?? 0) * _serviceFeePercent / 100).round()}',
                             style: const TextStyle(fontSize: 12),
                           ),
                         ],

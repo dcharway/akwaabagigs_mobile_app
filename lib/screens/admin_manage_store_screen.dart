@@ -58,7 +58,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
               controller: priceController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Price (GHS)',
+                labelText: 'Price (GH₵)',
                 prefixText: 'GH₵ ',
               ),
             ),

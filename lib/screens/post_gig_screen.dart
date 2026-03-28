@@ -268,8 +268,8 @@ class _PostGigScreenState extends State<PostGigScreen> {
                 controller: _salaryController,
                 decoration: const InputDecoration(
                   labelText: 'Pay / Salary',
-                  hintText: 'e.g., GHS 500/day or Negotiable',
-                  prefixIcon: Icon(Icons.attach_money),
+                  hintText: 'e.g., GH₵500/day or Negotiable',
+                  prefixIcon: Icon(Icons.payments_outlined),
                 ),
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Salary is required' : null,

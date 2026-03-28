@@ -281,7 +281,7 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
                                   ),
                                 ),
                                 Text(
-                                  'GHS ${plan['price']}',
+                                  'GH₵${plan['price']}',
                                   style: TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
@@ -365,7 +365,7 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
                                   strokeWidth: 2,
                                   color: Colors.white))
                           : Text(
-                              'Pay GHS ${_plans[_selectedIndex]['price']} for ${_plans[_selectedIndex]['name']}',
+                              'Pay GH₵${_plans[_selectedIndex]['price']} for ${_plans[_selectedIndex]['name']}',
                               style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w600),

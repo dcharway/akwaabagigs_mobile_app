@@ -133,7 +133,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                   const SizedBox(height: 8),
                   _buildInfoRow(
                     context,
-                    Icons.attach_money,
+                    Icons.payments_outlined,
                     widget.job.salary,
                   ),
                   const SizedBox(height: 8),

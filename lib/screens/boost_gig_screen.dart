@@ -261,7 +261,7 @@ class _BoostGigScreenState extends State<BoostGigScreen> {
                             style: const TextStyle(
                                 fontWeight: FontWeight.w500)),
                       ),
-                      Text('GHS ${opt['price']}',
+                      Text('GH₵${opt['price']}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -319,7 +319,7 @@ class _BoostGigScreenState extends State<BoostGigScreen> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white))
                     : Text(
-                        'Pay GHS ${selectedOption['price']} for ${boost['name']}',
+                        'Pay GH₵${selectedOption['price']} for ${boost['name']}',
                         style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w600),
                       ),

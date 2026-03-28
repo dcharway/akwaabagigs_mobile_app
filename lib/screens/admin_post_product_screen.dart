@@ -210,8 +210,8 @@ class _AdminPostProductScreenState extends State<AdminPostProductScreen> {
                       controller: _priceController,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                        labelText: 'Price (GHS)',
-                        prefixText: 'GH₵ ',
+                        labelText: 'Price (GH₵)',
+                        prefixText: 'GH₵',
                       ),
                       validator: (v) {
                         if (v == null || v.isEmpty) return 'Required';
