@@ -349,3 +349,39 @@ Parse.Cloud.beforeDelete('VideoAd', async (request) => {
     throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Admin access required to delete video ads');
   }
 });
+
+// ============ CUSTOMER SUPPORT CHATBOT ============
+
+/**
+ * AI customer support chat function.
+ * Called from the Flutter AI Toolkit's SupportChatProvider.
+ *
+ * To upgrade: Replace the rule-based responses below with an API call
+ * to Gemini, Claude, or GPT. The Flutter app works with either.
+ *
+ * Params: { message: string, userId?: string, email?: string }
+ * Returns: { reply: string }
+ */
+Parse.Cloud.define('customerSupportChat', async (request) => {
+  const { message } = request.params;
+  if (!message) {
+    throw new Parse.Error(Parse.Error.INVALID_VALUE, 'message is required');
+  }
+
+  const q = message.toLowerCase();
+
+  if (q.includes('post') && q.includes('gig')) {
+    return { reply: 'To post a gig: Go to Gigs tab > Post Gig > Fill details > Pay GH₵117.50 > Your gig goes live!' };
+  }
+  if (q.includes('bid') || q.includes('apply')) {
+    return { reply: 'To apply: Browse gigs > Tap Apply & Bid > Fill details > Choose bid amount (50/100 GH₵ increments) > Wait for poster approval.' };
+  }
+  if (q.includes('chat') || q.includes('message')) {
+    return { reply: 'Chat activates after the poster accepts your bid. Both parties must agree on the amount first.' };
+  }
+  if (q.includes('pay') || q.includes('momo')) {
+    return { reply: 'We accept Mobile Money (MTN/Vodafone/AirtelTigo), Cash (at agents), and Bank Transfer (GCB Bank).' };
+  }
+
+  return { reply: 'I can help with: posting gigs, applying & bidding, payments, verification, escrow, store purchases, and account issues. What do you need?' };
+});
