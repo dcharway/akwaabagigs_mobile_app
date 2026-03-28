@@ -58,6 +58,7 @@ class Back4AppChatProvider extends ChangeNotifier implements LlmProvider {
           return ChatMessage(
             origin: isMe ? MessageOrigin.user : MessageOrigin.llm,
             text: isMe ? content : '[$sender] $content',
+            attachments: const [],
           );
         }).toList();
         notifyListeners();
@@ -79,8 +80,6 @@ class Back4AppChatProvider extends ChangeNotifier implements LlmProvider {
 
       _messageSubscription!.on(LiveQueryEvent.create, (value) {
         final senderId = value.get<String>('senderId') ?? '';
-        // Only add messages from the OTHER party (own messages are
-        // already added via sendMessageStream)
         if (senderId != currentUserId) {
           final sender = value.get<String>('senderName') ?? otherPartyName;
           final content = value.get<String>('content') ?? '';
@@ -88,6 +87,7 @@ class Back4AppChatProvider extends ChangeNotifier implements LlmProvider {
           _history.add(ChatMessage(
             origin: MessageOrigin.llm,
             text: '[$sender] $content',
+            attachments: const [],
           ));
           notifyListeners();
         }
@@ -97,15 +97,12 @@ class Back4AppChatProvider extends ChangeNotifier implements LlmProvider {
     }
   }
 
-  /// Send a message to Back4App and yield a confirmation response.
-  /// The toolkit calls this when the user submits text.
   @override
   Stream<String> sendMessageStream(
     String prompt, {
     Iterable<Attachment> attachments = const [],
   }) async* {
     try {
-      // Save message to Back4App
       final message = ParseObject(Back4AppConfig.messageClass)
         ..set('chatRoomId', chatRoomId)
         ..set('conversationId', chatRoomId)
@@ -120,29 +117,26 @@ class Back4AppChatProvider extends ChangeNotifier implements LlmProvider {
         return;
       }
 
-      // Yield empty string — we don't generate a bot reply.
-      // The other party's reply comes via LiveQuery and is added
-      // to history as an "llm" message automatically.
+      // Yield empty — no bot reply. Other party replies via LiveQuery.
       yield '';
     } catch (e) {
       yield 'Error: ${e.toString()}';
     }
   }
 
-  /// Not used for person-to-person chat, but required by the interface.
   @override
   Stream<String> generateStream(
     String prompt, {
     Iterable<Attachment> attachments = const [],
   }) async* {
-    // Delegate to sendMessageStream for consistency
     yield* sendMessageStream(prompt, attachments: attachments);
   }
 
-  /// Clean up LiveQuery subscription.
+  @override
   void dispose() {
     if (_liveQuery != null && _messageSubscription != null) {
       _liveQuery!.client.unSubscribe(_messageSubscription!);
     }
+    super.dispose();
   }
 }

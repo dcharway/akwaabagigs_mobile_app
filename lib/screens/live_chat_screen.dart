@@ -78,7 +78,6 @@ class _LiveChatScreenState extends State<LiveChatScreen> {
         backgroundColor: const Color(0xFF4CAF50),
         foregroundColor: Colors.white,
         actions: const [
-          // Live indicator
           Padding(
             padding: EdgeInsets.only(right: 14),
             child: Row(
@@ -99,9 +98,7 @@ class _LiveChatScreenState extends State<LiveChatScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF4CAF50).withAlpha(25),
-            ),
+            color: const Color(0x194CAF50),
             child: const Row(
               children: [
                 Icon(Icons.check_circle, size: 16, color: Color(0xFF4CAF50)),
@@ -128,49 +125,46 @@ class _LiveChatScreenState extends State<LiveChatScreen> {
                     welcomeMessage:
                         'Chat with ${widget.otherPartyName} about "${widget.jobTitle}". '
                         'Messages are delivered in real-time.',
-                    style: _buildChatStyle(),
+                    style: LlmChatViewStyle(
+                      backgroundColor: Colors.white,
+                      submitButtonStyle: ActionButtonStyle(
+                        icon: Icons.send,
+                        iconColor: Colors.white,
+                        iconDecoration: const BoxDecoration(
+                          color: Color(0xFF4CAF50),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      userMessageStyle: UserMessageStyle(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4CAF50),
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(16),
+                            topRight: const Radius.circular(16),
+                            bottomLeft: const Radius.circular(16),
+                            bottomRight: const Radius.circular(4),
+                          ),
+                        ),
+                        textStyle:
+                            const TextStyle(color: Colors.white, fontSize: 15),
+                      ),
+                      llmMessageStyle: LlmMessageStyle(
+                        decoration: BoxDecoration(
+                          color: AppColors.gray100,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(16),
+                            topRight: const Radius.circular(16),
+                            bottomLeft: const Radius.circular(4),
+                            bottomRight: const Radius.circular(16),
+                          ),
+                        ),
+                        textStyle: const TextStyle(
+                            color: AppColors.gray900, fontSize: 15),
+                      ),
+                    ),
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  LlmChatViewStyle _buildChatStyle() {
-    return LlmChatViewStyle(
-      backgroundColor: Colors.white,
-      // Action button (send) style
-      actionButtonStyle: ActionButtonStyle(
-        icon: Icons.send,
-        iconColor: Colors.white,
-        backgroundColor: const Color(0xFF4CAF50),
-        hoverColor: const Color(0xFF388E3C),
-      ),
-      // User message bubble
-      userMessageStyle: LlmMessageStyle(
-        decoration: BoxDecoration(
-          color: const Color(0xFF4CAF50),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: const Radius.circular(16),
-            bottomRight: const Radius.circular(4),
-          ),
-        ),
-        textStyle: const TextStyle(color: Colors.white, fontSize: 15),
-      ),
-      // Other party's message bubble (displayed as "llm" origin)
-      llmMessageStyle: LlmMessageStyle(
-        decoration: BoxDecoration(
-          color: AppColors.gray100,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: const Radius.circular(4),
-            bottomRight: const Radius.circular(16),
-          ),
-        ),
-        textStyle: const TextStyle(color: AppColors.gray900, fontSize: 15),
       ),
     );
   }
