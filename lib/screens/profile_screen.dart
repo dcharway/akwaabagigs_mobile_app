@@ -11,6 +11,7 @@ import 'verification_screen.dart';
 import 'seeker_ratings_screen.dart';
 import 'pro_subscription_screen.dart';
 import 'kyc_verification_screen.dart';
+import 'customer_support_screen.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -845,26 +846,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.help_outline),
+                leading: const Icon(Icons.smart_toy,
+                    color: AppColors.amber600),
                 title: const Text('Help & Support'),
+                subtitle: const Text('AI-powered assistant — 24/7'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Help & Support'),
-                      content: const Text(
-                        'For help, contact us at support@akwaabagigs.com or visit our website.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('OK'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const CustomerSupportScreen()),
+                ),
               ),
               const Divider(height: 1),
               ListTile(
