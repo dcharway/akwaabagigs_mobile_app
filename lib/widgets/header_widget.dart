@@ -59,16 +59,13 @@ class HeaderWidget extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(color: AppColors.amber500, width: 2),
-                      color: AppColors.amber50,
                     ),
-                    child: const Center(
-                      child: Text(
-                        'A',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.amber700,
-                        ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/icon/app_icon.png',
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
