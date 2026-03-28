@@ -158,8 +158,6 @@ class _LiveChatScreenState extends State<LiveChatScreen> {
                             bottomRight: const Radius.circular(16),
                           ),
                         ),
-                        textStyle: const TextStyle(
-                            color: AppColors.gray900, fontSize: 15),
                       ),
                     ),
                   ),
