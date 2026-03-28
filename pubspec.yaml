@@ -25,6 +25,7 @@ dependencies:
   smile_id: ^10.0.0
   permission_handler: ^11.3.0
   video_player: ^2.9.2
+  flutter_ai_toolkit: ^1.0.0
 
 dev_dependencies:
   flutter_test:

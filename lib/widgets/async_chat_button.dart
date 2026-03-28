@@ -113,7 +113,7 @@ class _AsyncChatButtonState extends State<AsyncChatButton> {
           ),
           elevation: _chatEnabled ? 4 : 0,
           shadowColor: _chatEnabled
-              ? const Color(0xFF4CAF50).withOpacity(0.4)
+              ? const Color(0x664CAF50)
               : Colors.transparent,
         ),
       ),
