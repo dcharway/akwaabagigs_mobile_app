@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
+import '../utils/colors.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -52,6 +54,98 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _showForgotPassword() {
+    final resetEmailController = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isSending = false;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: const Text('Reset Password'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Enter your email address and we\'ll send you a link to reset your password.',
+                  style: TextStyle(fontSize: 13, color: AppColors.gray600),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: resetEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: isSending
+                    ? null
+                    : () async {
+                        final email = resetEmailController.text.trim();
+                        if (email.isEmpty || !email.contains('@')) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Enter a valid email')),
+                          );
+                          return;
+                        }
+                        setDialogState(() => isSending = true);
+                        try {
+                          await ApiService.requestPasswordReset(email);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Password reset link sent! Check your email.'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          setDialogState(() => isSending = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(e
+                                    .toString()
+                                    .replaceAll('Exception: ', '')),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isSending
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Send Reset Link'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -139,7 +233,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
+
+              // Forgot password
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _showForgotPassword,
+                  child: const Text(
+                    'Forgot Password?',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
 
               FilledButton(
                 onPressed: _isLoading ? null : _login,

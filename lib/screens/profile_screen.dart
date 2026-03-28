@@ -793,6 +793,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
         ),
         const SizedBox(height: 12),
+        // Account & Security
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.person_outline,
+                    color: AppColors.blue600),
+                title: const Text('Account Info'),
+                subtitle: Text(authProvider.user?.email ?? ''),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showAccountInfo(context),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.lock_outline,
+                    color: AppColors.amber600),
+                title: const Text('Change Password'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showChangePassword(context),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.email_outlined,
+                    color: AppColors.gray600),
+                title: const Text('Reset Password via Email'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showResetPasswordEmail(
+                    context, authProvider.user?.email ?? ''),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         Card(
           child: Column(
             children: [
@@ -874,6 +907,279 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showAccountInfo(BuildContext context) async {
+    try {
+      final info = await ApiService.getAccountInfo();
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.person, color: AppColors.blue600),
+              SizedBox(width: 8),
+              Text('Account Info'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildInfoTile('Username', info['username'] ?? ''),
+              _buildInfoTile('Email', info['email'] ?? ''),
+              _buildInfoTile('User ID', info['userId'] ?? ''),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
+  Widget _buildInfoTile(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label,
+                style: const TextStyle(
+                    color: AppColors.gray500,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13)),
+          ),
+          Expanded(
+            child: SelectableText(value,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChangePassword(BuildContext context) {
+    final currentPwController = TextEditingController();
+    final newPwController = TextEditingController();
+    final confirmPwController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isChanging = false;
+        bool obscureCurrent = true;
+        bool obscureNew = true;
+
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: const Text('Change Password'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: currentPwController,
+                    obscureText: obscureCurrent,
+                    decoration: InputDecoration(
+                      labelText: 'Current Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureCurrent
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                        onPressed: () => setDialogState(
+                            () => obscureCurrent = !obscureCurrent),
+                      ),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: newPwController,
+                    obscureText: obscureNew,
+                    decoration: InputDecoration(
+                      labelText: 'New Password',
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureNew
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                        onPressed: () => setDialogState(
+                            () => obscureNew = !obscureNew),
+                      ),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: confirmPwController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm New Password',
+                      prefixIcon: const Icon(Icons.lock_clock),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: isChanging
+                    ? null
+                    : () async {
+                        if (currentPwController.text.isEmpty ||
+                            newPwController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('All fields are required')),
+                          );
+                          return;
+                        }
+                        if (newPwController.text.length < 6) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text(
+                                    'New password must be at least 6 characters')),
+                          );
+                          return;
+                        }
+                        if (newPwController.text !=
+                            confirmPwController.text) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content:
+                                    Text('New passwords do not match')),
+                          );
+                          return;
+                        }
+                        setDialogState(() => isChanging = true);
+                        try {
+                          await ApiService.changePassword(
+                            currentPassword: currentPwController.text,
+                            newPassword: newPwController.text,
+                          );
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content:
+                                    Text('Password changed successfully!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          setDialogState(() => isChanging = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(e
+                                    .toString()
+                                    .replaceAll('Exception: ', '')),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isChanging
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Change Password'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showResetPasswordEmail(BuildContext context, String email) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isSending = false;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: const Text('Reset Password'),
+            content: Text(
+              'Send a password reset link to:\n\n$email\n\n'
+              'You will receive an email with instructions to create a new password.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: isSending
+                    ? null
+                    : () async {
+                        setDialogState(() => isSending = true);
+                        try {
+                          await ApiService.requestPasswordReset(email);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Reset link sent! Check your email.'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          setDialogState(() => isSending = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(e
+                                    .toString()
+                                    .replaceAll('Exception: ', '')),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isSending
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Send Reset Link'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
