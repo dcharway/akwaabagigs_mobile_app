@@ -1,11 +1,11 @@
 {
-    "name": "akwaaba_gigs",
-    "short_name": "akwaaba_gigs",
+    "name": "Akwaaba Gigs",
+    "short_name": "Akwaaba Gigs",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#32281E",
+    "theme_color": "#D97706",
+    "description": "Connecting real people to real gigs in Ghana",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

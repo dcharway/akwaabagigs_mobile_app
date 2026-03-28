@@ -142,18 +142,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.white.withOpacity(0.2),
                       border: Border.all(color: Colors.white, width: 2),
                     ),
-                    child: Center(
-                      child: Text(
-                        authProvider.isAuthenticated
-                            ? (authProvider.user?.firstName?.isNotEmpty == true
-                                ? authProvider.user!.firstName[0].toUpperCase()
-                                : 'A')
-                            : 'A',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/icon/app_icon.png',
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
