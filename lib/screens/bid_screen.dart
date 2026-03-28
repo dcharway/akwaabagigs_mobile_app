@@ -56,7 +56,7 @@ class _BidScreenState extends State<BidScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                'Bid of GHS $_bidAmountGhs submitted! The poster will review your bid.'),
+                'Bid of GH₵$_bidAmountGhs submitted! The poster will review your bid.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -117,7 +117,7 @@ class _BidScreenState extends State<BidScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(Icons.attach_money,
+                      const Icon(Icons.payments_outlined,
                           size: 16, color: AppColors.gray600),
                       const SizedBox(width: 4),
                       Text(
@@ -296,10 +296,10 @@ class _BidScreenState extends State<BidScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Min: GHS $_minBid',
+                  Text('Min: GH₵$_minBid',
                       style: const TextStyle(
                           fontSize: 11, color: AppColors.gray500)),
-                  Text('Max: GHS $_maxBid',
+                  Text('Max: GH₵$_maxBid',
                       style: const TextStyle(
                           fontSize: 11, color: AppColors.gray500)),
                 ],
@@ -381,7 +381,7 @@ class _BidScreenState extends State<BidScreen> {
           child: Column(
             children: [
               Text(
-                'GHS $value',
+                'GH₵$value',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

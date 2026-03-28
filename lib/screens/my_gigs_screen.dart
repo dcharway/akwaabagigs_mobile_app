@@ -353,7 +353,7 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          'Escrow: GHS ${job.escrowAmount}',
+                          'Escrow: GH₵${job.escrowAmount}',
                           style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,

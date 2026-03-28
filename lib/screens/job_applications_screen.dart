@@ -77,8 +77,8 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Set or adjust the job amount (in GHS). '
-              'Bids must be in 50 or 100 GHS increments.',
+              'Set or adjust the job amount (in GH₵). '
+              'Bids must be in 50 or 100 GH₵ increments.',
               style: TextStyle(fontSize: 13, color: AppColors.gray600),
             ),
             const SizedBox(height: 16),
@@ -86,7 +86,7 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
               controller: controller,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                labelText: 'Amount (GHS)',
+                labelText: 'Amount (GH₵)',
                 prefixText: 'GH₵ ',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -120,7 +120,7 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  'Asking amount set to GHS ${(result / 100).round()}'),
+                  'Asking amount set to GH₵${(result / 100).round()}'),
               backgroundColor: Colors.green,
             ),
           );
@@ -270,7 +270,7 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
                               color: AppColors.amber50,
                               child: Row(
                                 children: [
-                                  const Icon(Icons.attach_money,
+                                  const Icon(Icons.payments_outlined,
                                       size: 18,
                                       color: AppColors.amber700),
                                   const SizedBox(width: 8),

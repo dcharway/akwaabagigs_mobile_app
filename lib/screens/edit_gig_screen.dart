@@ -181,7 +181,7 @@ class _EditGigScreenState extends State<EditGigScreen> {
                 controller: _salaryController,
                 decoration: const InputDecoration(
                   labelText: 'Pay / Salary',
-                  prefixIcon: Icon(Icons.attach_money),
+                  prefixIcon: Icon(Icons.payments_outlined),
                 ),
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Salary is required' : null,
