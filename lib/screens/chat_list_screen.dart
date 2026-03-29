@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
+import '../config/back4app_config.dart';
 import '../models/conversation.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
-import 'chat_screen.dart';
+import '../utils/colors.dart';
+import 'live_chat_screen.dart';
 import 'login_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -15,58 +19,235 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
-  List<Conversation> _conversations = [];
+  List<_ChatEntry> _chats = [];
   bool _isLoading = true;
   String? _error;
+  LiveQuery? _liveQuery;
+  Subscription? _messageSubscription;
 
   @override
   void initState() {
     super.initState();
-    _loadConversations();
+    _loadChats();
+    _subscribeLiveQuery();
   }
 
-  Future<void> _loadConversations() async {
+  @override
+  void dispose() {
+    _unsubscribeLiveQuery();
+    super.dispose();
+  }
+
+  /// Load conversations and fetch the last message for each.
+  Future<void> _loadChats() async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.isAuthenticated) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      _conversations = await ApiService.getConversations();
-    } catch (e) {
-      _error = e.toString();
-    }
+      final conversations = await ApiService.getConversations();
+      final currentUserId = auth.user?.id ?? '';
+      final entries = <_ChatEntry>[];
 
-    if (mounted) {
-      setState(() => _isLoading = false);
+      for (final conv in conversations) {
+        final isCurrentUserPoster = currentUserId == conv.posterId;
+        final otherName = isCurrentUserPoster
+            ? conv.seekerName
+            : conv.posterName;
+        final chatRoomId = 'chat_${conv.jobId}';
+
+        // Fetch last message for this chat room
+        String? lastMessageText;
+        String? lastMessageSenderId;
+        DateTime? lastMessageTime;
+        int unreadCount = 0;
+
+        try {
+          final msgQuery = QueryBuilder<ParseObject>(
+              ParseObject(Back4AppConfig.messageClass))
+            ..whereEqualTo('chatRoomId', chatRoomId)
+            ..orderByDescending('createdAt')
+            ..setLimit(1);
+
+          final msgResponse = await msgQuery.query();
+          if (msgResponse.success &&
+              msgResponse.results != null &&
+              msgResponse.results!.isNotEmpty) {
+            final lastMsg = msgResponse.results!.first as ParseObject;
+            lastMessageText = lastMsg.get<String>('content');
+            lastMessageSenderId = lastMsg.get<String>('senderId');
+            lastMessageTime = lastMsg.createdAt;
+          }
+
+          // Count unread
+          final unreadQuery = QueryBuilder<ParseObject>(
+              ParseObject(Back4AppConfig.messageClass))
+            ..whereEqualTo('chatRoomId', chatRoomId)
+            ..whereEqualTo('isRead', false)
+            ..whereNotEqualTo('senderId', currentUserId);
+          final unreadResponse = await unreadQuery.count();
+          if (unreadResponse.success) {
+            unreadCount = unreadResponse.count;
+          }
+        } catch (_) {}
+
+        entries.add(_ChatEntry(
+          conversation: conv,
+          otherPartyName: otherName,
+          chatRoomId: chatRoomId,
+          lastMessageText: lastMessageText,
+          lastMessageSenderId: lastMessageSenderId,
+          lastMessageTime:
+              lastMessageTime ?? conv.lastMessageAt ?? conv.createdAt,
+          unreadCount: unreadCount,
+          currentUserId: currentUserId,
+        ));
+      }
+
+      // Deduplicate by chatRoomId (keep the one with latest message)
+      final seen = <String, _ChatEntry>{};
+      for (final entry in entries) {
+        final existing = seen[entry.chatRoomId];
+        if (existing == null ||
+            entry.lastMessageTime.isAfter(existing.lastMessageTime)) {
+          seen[entry.chatRoomId] = entry;
+        }
+      }
+
+      // Sort by last message time (newest first)
+      final unique = seen.values.toList()
+        ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+
+      if (mounted) {
+        setState(() {
+          _chats = unique;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString().replaceAll('Exception: ', '');
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// LiveQuery on Message class to refresh chat list in real-time.
+  Future<void> _subscribeLiveQuery() async {
+    try {
+      _liveQuery = LiveQuery();
+      final query = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.messageClass));
+      _messageSubscription = await _liveQuery!.client.subscribe(query);
+
+      _messageSubscription!.on(LiveQueryEvent.create, (_) {
+        // Reload list when any new message arrives
+        if (mounted) _loadChats();
+      });
+    } catch (_) {}
+  }
+
+  void _unsubscribeLiveQuery() {
+    if (_liveQuery != null && _messageSubscription != null) {
+      _liveQuery!.client.unSubscribe(_messageSubscription!);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
+    final auth = context.watch<AuthProvider>();
 
-    if (!authProvider.isAuthenticated) {
+    if (!auth.isAuthenticated) {
+      return _buildSignInPrompt(context);
+    }
+
+    if (_isLoading) {
+      return const Center(
+          child: CircularProgressIndicator(color: AppColors.amber600));
+    }
+
+    if (_error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
-            ),
+            const Icon(Icons.error_outline,
+                size: 64, color: AppColors.red500),
             const SizedBox(height: 16),
-            Text(
-              'Sign in to view messages',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            const Text('Failed to load chats'),
             const SizedBox(height: 8),
-            Text(
-              'Connect with gig posters and seekers',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
+            FilledButton(
+              onPressed: _loadChats,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_chats.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.chat_bubble_outline,
+                  size: 64, color: AppColors.gray400),
+              const SizedBox(height: 16),
+              const Text('No conversations yet',
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              const Text(
+                'Apply for a gig and place a bid.\nChat unlocks when the poster accepts.',
+                style: TextStyle(color: AppColors.gray500, fontSize: 13),
+                textAlign: TextAlign.center,
               ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      color: AppColors.amber600,
+      onRefresh: _loadChats,
+      child: ListView.builder(
+        itemCount: _chats.length,
+        itemBuilder: (context, index) {
+          return _buildChatTile(_chats[index]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildSignInPrompt(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.chat_bubble_outline,
+                size: 64, color: AppColors.gray400),
+            const SizedBox(height: 16),
+            const Text('Sign in to view messages',
+                style: TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const Text(
+              'Connect with gig posters and seekers',
+              style: TextStyle(color: AppColors.gray500),
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
@@ -75,166 +256,184 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   context,
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
                 );
-                if (loggedIn == true) {
-                  _loadConversations();
-                }
+                if (loggedIn == true) _loadChats();
               },
               icon: const Icon(Icons.login),
               label: const Text('Sign In'),
             ),
           ],
         ),
-      );
+      ),
+    );
+  }
+
+  Widget _buildChatTile(_ChatEntry chat) {
+    final timeFormat = DateFormat('h:mm a');
+    final dateFormat = DateFormat('MMM d');
+    final now = DateTime.now();
+    final isToday = chat.lastMessageTime.day == now.day &&
+        chat.lastMessageTime.month == now.month &&
+        chat.lastMessageTime.year == now.year;
+    final hasUnread = chat.unreadCount > 0;
+
+    // Build last message preview
+    String preview;
+    if (chat.lastMessageText != null) {
+      final isMyMessage = chat.lastMessageSenderId == chat.currentUserId;
+      preview = isMyMessage
+          ? 'You: ${chat.lastMessageText}'
+          : chat.lastMessageText!;
+    } else {
+      preview = 'Tap to start chatting';
     }
 
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Theme.of(context).colorScheme.error,
+    return Container(
+      decoration: BoxDecoration(
+        color: hasUnread ? AppColors.amber50 : Colors.white,
+        border: const Border(bottom: BorderSide(color: AppColors.gray200)),
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        leading: CircleAvatar(
+          radius: 24,
+          backgroundColor:
+              hasUnread ? AppColors.amber500 : AppColors.gray200,
+          child: Text(
+            chat.otherPartyName.isNotEmpty
+                ? chat.otherPartyName[0].toUpperCase()
+                : '?',
+            style: TextStyle(
+              color: hasUnread ? Colors.white : AppColors.gray700,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
-            const SizedBox(height: 16),
-            Text('Failed to load conversations'),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _loadConversations,
-              child: const Text('Retry'),
-            ),
-          ],
+          ),
         ),
-      );
-    }
-
-    if (_conversations.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        title: Row(
           children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
+            Expanded(
+              child: Text(
+                chat.otherPartyName,
+                style: TextStyle(
+                  fontWeight:
+                      hasUnread ? FontWeight.bold : FontWeight.w600,
+                  color: AppColors.gray900,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            const SizedBox(height: 16),
             Text(
-              'No conversations yet',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Start chatting from a gig listing',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
+              isToday
+                  ? timeFormat.format(chat.lastMessageTime)
+                  : dateFormat.format(chat.lastMessageTime),
+              style: TextStyle(
+                fontSize: 12,
+                color: hasUnread ? AppColors.amber700 : AppColors.gray500,
+                fontWeight:
+                    hasUnread ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ],
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadConversations,
-      child: ListView.separated(
-        itemCount: _conversations.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          final conversation = _conversations[index];
-          return _buildConversationTile(context, conversation, authProvider);
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              // Job tag
+              if (chat.conversation.jobTitle != null &&
+                  chat.conversation.jobTitle!.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppColors.amber400.withAlpha(40),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    chat.conversation.jobTitle!,
+                    style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.amber700,
+                        fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              // Last message preview
+              Expanded(
+                child: Text(
+                  preview,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: hasUnread
+                        ? AppColors.gray800
+                        : AppColors.gray500,
+                    fontWeight:
+                        hasUnread ? FontWeight.w500 : FontWeight.normal,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Unread badge
+              if (hasUnread)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 7, vertical: 3),
+                  decoration: const BoxDecoration(
+                    color: AppColors.amber600,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    '${chat.unreadCount}',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => LiveChatScreen(
+                jobId: chat.conversation.jobId ?? '',
+                jobTitle: chat.conversation.jobTitle ?? '',
+                otherPartyName: chat.otherPartyName,
+              ),
+            ),
+          ).then((_) => _loadChats());
         },
       ),
     );
   }
+}
 
-  Widget _buildConversationTile(
-    BuildContext context,
-    Conversation conversation,
-    AuthProvider authProvider,
-  ) {
-    final isCurrentUserPoster = authProvider.user?.id == conversation.posterId;
-    final otherPartyName = isCurrentUserPoster
-        ? conversation.seekerName
-        : conversation.posterName;
+/// Internal model combining conversation data with last-message metadata.
+class _ChatEntry {
+  final Conversation conversation;
+  final String otherPartyName;
+  final String chatRoomId;
+  final String? lastMessageText;
+  final String? lastMessageSenderId;
+  final DateTime lastMessageTime;
+  final int unreadCount;
+  final String currentUserId;
 
-    final timeFormat = DateFormat('h:mm a');
-    final dateFormat = DateFormat('MMM d');
-    final now = DateTime.now();
-    final lastMessage = conversation.lastMessageAt ?? conversation.createdAt;
-    final isToday = lastMessage.day == now.day &&
-        lastMessage.month == now.month &&
-        lastMessage.year == now.year;
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        child: Text(
-          otherPartyName.isNotEmpty ? otherPartyName[0].toUpperCase() : '?',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              otherPartyName,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text(
-            isToday
-                ? timeFormat.format(lastMessage)
-                : dateFormat.format(lastMessage),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-            ),
-          ),
-        ],
-      ),
-      subtitle: conversation.jobTitle != null && conversation.jobTitle!.isNotEmpty
-          ? Row(
-              children: [
-                Icon(
-                  Icons.work_outline,
-                  size: 14,
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Re: ${conversation.jobTitle}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            )
-          : null,
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(
-              conversationId: conversation.id,
-              otherPartyName: otherPartyName,
-              jobTitle: conversation.jobTitle,
-            ),
-          ),
-        ).then((_) => _loadConversations());
-      },
-    );
-  }
+  _ChatEntry({
+    required this.conversation,
+    required this.otherPartyName,
+    required this.chatRoomId,
+    this.lastMessageText,
+    this.lastMessageSenderId,
+    required this.lastMessageTime,
+    this.unreadCount = 0,
+    required this.currentUserId,
+  });
 }
