@@ -415,6 +415,12 @@ class ApiService {
       ..set('participantB', participantB)
       ..set('lastMessageAt', DateTime.now().toIso8601String());
 
+    // ACL: both participants can read/write
+    final convAcl = ParseACL()
+      ..setPublicReadAccess(allowed: true)
+      ..setPublicWriteAccess(allowed: true);
+    conversation.setACL(convAcl);
+
     // Look up job title
     final jobQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.jobClass))
@@ -464,6 +470,12 @@ class ApiService {
           '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'.trim())
       ..set('content', content)
       ..set('isRead', false);
+
+    // Set ACL: public read so both participants can see, sender can write
+    final msgAcl = ParseACL()
+      ..setPublicReadAccess(allowed: true)
+      ..setWriteAccess(userId: user.objectId!, allowed: true);
+    message.setACL(msgAcl);
 
     final response = await message.save();
     if (response.success && response.result != null) {

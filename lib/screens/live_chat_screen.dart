@@ -289,12 +289,23 @@ class _LiveChatScreenState extends State<LiveChatScreen>
 
   void _markSingleMessageRead(ParseObject msg) async {
     final currentUserId = _currentUserId;
+    final msgId = msg.objectId ?? '';
+    if (msgId.startsWith('_local_')) return; // Skip optimistic messages
     if (msg.get<String>('senderId') != currentUserId &&
         msg.get<bool>('isRead') != true) {
-      final update = ParseObject(Back4AppConfig.messageClass)
-        ..objectId = msg.objectId
-        ..set('isRead', true);
-      update.save(); // Fire and forget
+      try {
+        final update = ParseObject(Back4AppConfig.messageClass)
+          ..objectId = msgId
+          ..set('isRead', true);
+        // Set public ACL so the update can go through
+        final acl = ParseACL()
+          ..setPublicReadAccess(allowed: true)
+          ..setPublicWriteAccess(allowed: true);
+        update.setACL(acl);
+        await update.save();
+      } catch (_) {
+        // Silently fail — read receipts are non-critical
+      }
     }
   }
 
@@ -321,9 +332,8 @@ class _LiveChatScreenState extends State<LiveChatScreen>
       ..set('senderId', user.objectId)
       ..set('senderName', senderName)
       ..set('content', text)
-      ..set('isRead', false)
-      ..set('_localId', localId);
-    // Fake the objectId so the list can track it
+      ..set('isRead', false);
+    // Fake the objectId so the list can track it locally
     localMsg.objectId = localId;
 
     setState(() => _messages.add(localMsg));
@@ -339,7 +349,14 @@ class _LiveChatScreenState extends State<LiveChatScreen>
         ..set('content', text)
         ..set('isRead', false);
 
+      // Set ACL: public read so both parties can see, sender can write
+      final acl = ParseACL()
+        ..setPublicReadAccess(allowed: true)
+        ..setWriteAccess(userId: user.objectId!, allowed: true);
+      serverMsg.setACL(acl);
+
       final response = await serverMsg.save();
+
       if (response.success && response.result != null) {
         final saved = response.result as ParseObject;
         // 3. Replace local message with server-confirmed one
@@ -353,9 +370,12 @@ class _LiveChatScreenState extends State<LiveChatScreen>
           });
         }
       } else {
+        debugPrint(
+            'Message save failed: ${response.error?.code} ${response.error?.message}');
         _markAsFailed(localId);
       }
     } catch (e) {
+      debugPrint('Message save exception: $e');
       _markAsFailed(localId);
     }
   }

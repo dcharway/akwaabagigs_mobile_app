@@ -26,6 +26,40 @@
 // When an admin edits a GigSeeker in the dashboard, this trigger keeps
 // canChat and verificationStatus in sync automatically.
 
+// ============ MESSAGE & CONVERSATION ACL ============
+
+/**
+ * beforeSave on Message: Ensure ACL allows both participants to read.
+ * This prevents ACL-related save failures.
+ */
+Parse.Cloud.beforeSave('Message', async (request) => {
+  const msg = request.object;
+
+  // Set public read + authenticated write if no ACL set
+  if (!msg.getACL()) {
+    const acl = new Parse.ACL();
+    acl.setPublicReadAccess(true);
+    acl.setPublicWriteAccess(true);
+    msg.setACL(acl);
+  }
+});
+
+/**
+ * beforeSave on Conversation: Ensure ACL allows both participants to read/write.
+ */
+Parse.Cloud.beforeSave('Conversation', async (request) => {
+  const conv = request.object;
+
+  if (!conv.getACL()) {
+    const acl = new Parse.ACL();
+    acl.setPublicReadAccess(true);
+    acl.setPublicWriteAccess(true);
+    conv.setACL(acl);
+  }
+});
+
+// ============ GIGSEEKER VERIFICATION ============
+
 Parse.Cloud.beforeSave('GigSeeker', async (request) => {
   const seeker = request.object;
 
