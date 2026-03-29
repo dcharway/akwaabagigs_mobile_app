@@ -25,24 +25,31 @@ class NotificationsProvider extends ChangeNotifier {
   final List<AppNotification> _notifications = [];
   bool _isConnected = false;
   bool _isConnecting = false;
+  bool _defaultsAdded = false;
   LiveQuery? _liveQuery;
   Subscription? _jobSubscription;
   Subscription? _applicationSubscription;
   Subscription? _ratingSubscription;
+  Subscription? _messageSubscription;
 
   List<AppNotification> get notifications => _notifications;
-  int get unreadCount =>
-      _notifications.where((n) => !n.isRead).length;
+  int get unreadCount => _notifications.where((n) => !n.isRead).length;
   bool get isConnected => _isConnected;
 
   Future<void> connect() async {
     if (_isConnected || _isConnecting) return;
     _isConnecting = true;
 
+    // Add default welcome alerts once
+    if (!_defaultsAdded) {
+      _addDefaults();
+      _defaultsAdded = true;
+    }
+
     try {
       _liveQuery = LiveQuery();
 
-      // Subscribe to Job updates
+      // ---- Job updates (for seekers: new gigs; for posters: status changes) ----
       final jobQuery = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.jobClass));
       _jobSubscription = await _liveQuery!.client.subscribe(jobQuery);
@@ -51,49 +58,127 @@ class NotificationsProvider extends ChangeNotifier {
         _addNotification(
           type: 'job_update',
           title: 'New Gig Posted',
-          message: '${value.get<String>('title') ?? 'A new gig'} has been posted',
+          message:
+              '${value.get<String>('title') ?? 'A new gig'} has been posted',
+          data: {'jobId': value.objectId},
         );
       });
 
       _jobSubscription!.on(LiveQueryEvent.update, (value) {
-        _addNotification(
-          type: 'job_update',
-          title: 'Gig Update',
-          message: '${value.get<String>('title') ?? 'A gig'} has been updated',
-        );
+        final status = value.get<String>('status') ?? '';
+        if (status == 'bid_agreed') {
+          _addNotification(
+            type: 'bid_agreed',
+            title: 'Bid Accepted!',
+            message:
+                'A bid on "${value.get<String>('title') ?? 'your gig'}" has been accepted. Chat is now active.',
+            data: {'jobId': value.objectId},
+          );
+        } else if (status == 'completed') {
+          _addNotification(
+            type: 'job_completed',
+            title: 'Gig Completed',
+            message:
+                '"${value.get<String>('title') ?? 'A gig'}" has been marked as completed.',
+            data: {'jobId': value.objectId},
+          );
+        } else {
+          _addNotification(
+            type: 'job_update',
+            title: 'Gig Updated',
+            message:
+                '${value.get<String>('title') ?? 'A gig'} has been updated',
+            data: {'jobId': value.objectId},
+          );
+        }
       });
 
-      // Subscribe to Application updates
+      // ---- Application updates (for posters: new applicants; for seekers: status) ----
       final appQuery = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.applicationClass));
-      _applicationSubscription = await _liveQuery!.client.subscribe(appQuery);
+      _applicationSubscription =
+          await _liveQuery!.client.subscribe(appQuery);
 
       _applicationSubscription!.on(LiveQueryEvent.create, (value) {
         _addNotification(
           type: 'new_application',
           title: 'New Application',
-          message: '${value.get<String>('fullName') ?? 'Someone'} applied to your gig',
+          message:
+              '${value.get<String>('fullName') ?? 'Someone'} applied to your gig',
+          data: {
+            'jobId': value.get<String>('jobId'),
+            'applicationId': value.objectId,
+          },
         );
       });
 
       _applicationSubscription!.on(LiveQueryEvent.update, (value) {
-        _addNotification(
-          type: 'application_update',
-          title: 'Application Update',
-          message: 'An application status has changed to ${value.get<String>('status') ?? 'updated'}',
-        );
+        final bidStatus = value.get<String>('bidStatus') ?? '';
+        final appStatus = value.get<String>('status') ?? '';
+
+        if (bidStatus == 'approved') {
+          _addNotification(
+            type: 'bid_approved',
+            title: 'Your Bid Was Accepted!',
+            message:
+                'Your bid of GH₵${((value.get<int>('bidAmountPesewas') ?? 0) / 100).round()} was accepted. Chat is now enabled.',
+            data: {'applicationId': value.objectId},
+          );
+        } else if (bidStatus == 'rejected') {
+          _addNotification(
+            type: 'bid_rejected',
+            title: 'Bid Not Accepted',
+            message:
+                'Your bid was not accepted. Try a different amount or gig.',
+            data: {'applicationId': value.objectId},
+          );
+        } else if (appStatus == 'approved') {
+          _addNotification(
+            type: 'application_approved',
+            title: 'Application Approved',
+            message: 'Your application has been approved!',
+            data: {'applicationId': value.objectId},
+          );
+        } else {
+          _addNotification(
+            type: 'application_update',
+            title: 'Application Update',
+            message:
+                'Application status changed to ${value.get<String>('status') ?? 'updated'}',
+            data: {'applicationId': value.objectId},
+          );
+        }
       });
 
-      // Subscribe to Rating updates
+      // ---- Rating updates ----
       final ratingQuery = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.ratingClass));
-      _ratingSubscription = await _liveQuery!.client.subscribe(ratingQuery);
+      _ratingSubscription =
+          await _liveQuery!.client.subscribe(ratingQuery);
 
       _ratingSubscription!.on(LiveQueryEvent.create, (value) {
         _addNotification(
           type: 'new_rating',
-          title: 'New Rating',
-          message: 'You received a new rating of ${value.get<int>('rating') ?? 0}/5',
+          title: 'New Rating Received',
+          message:
+              'You received a ${value.get<int>('rating') ?? 0}/5 star rating',
+          data: {'ratingId': value.objectId},
+        );
+      });
+
+      // ---- Message updates (for chat notifications) ----
+      final msgQuery = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.messageClass));
+      _messageSubscription =
+          await _liveQuery!.client.subscribe(msgQuery);
+
+      _messageSubscription!.on(LiveQueryEvent.create, (value) {
+        _addNotification(
+          type: 'new_message',
+          title: 'New Message',
+          message:
+              '${value.get<String>('senderName') ?? 'Someone'}: ${_truncate(value.get<String>('content') ?? '', 50)}',
+          data: {'chatRoomId': value.get<String>('chatRoomId')},
         );
       });
 
@@ -108,14 +193,56 @@ class NotificationsProvider extends ChangeNotifier {
     }
   }
 
+  /// Default welcome alerts for new users.
+  void _addDefaults() {
+    _notifications.addAll([
+      AppNotification(
+        type: 'welcome',
+        title: 'Welcome to Akwaaba Gigs!',
+        message:
+            'Browse gigs, apply, and connect with employers across Ghana.',
+        isRead: false,
+      ),
+      AppNotification(
+        type: 'tip_seeker',
+        title: 'Tip: Get Verified',
+        message:
+            'Verify your ID in Profile to unlock chat and get more gig opportunities.',
+        isRead: false,
+      ),
+      AppNotification(
+        type: 'tip_poster',
+        title: 'Tip: Post Your First Gig',
+        message:
+            'Go to the Gigs tab and tap "Post Gig" to find skilled workers.',
+        isRead: false,
+      ),
+      AppNotification(
+        type: 'tip_bid',
+        title: 'How Bidding Works',
+        message:
+            'Apply for a gig and place a bid in 50 or 100 GH₵ increments. Chat unlocks when the poster accepts.',
+        isRead: false,
+      ),
+    ]);
+    notifyListeners();
+  }
+
+  String _truncate(String text, int maxLength) {
+    if (text.length <= maxLength) return text;
+    return '${text.substring(0, maxLength)}...';
+  }
+
   void _addNotification({
     required String type,
     required String title,
     required String message,
+    Map<String, dynamic>? data,
   }) {
     _notifications.insert(
       0,
-      AppNotification(type: type, title: title, message: message),
+      AppNotification(
+          type: type, title: title, message: message, data: data),
     );
     notifyListeners();
   }
@@ -149,6 +276,9 @@ class NotificationsProvider extends ChangeNotifier {
       }
       if (_ratingSubscription != null) {
         _liveQuery!.client.unSubscribe(_ratingSubscription!);
+      }
+      if (_messageSubscription != null) {
+        _liveQuery!.client.unSubscribe(_messageSubscription!);
       }
     }
     _isConnected = false;
