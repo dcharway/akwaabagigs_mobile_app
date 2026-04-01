@@ -57,56 +57,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final entries = <_ChatEntry>[];
 
       for (final conv in conversations) {
-        final isCurrentUserPoster = currentUserId == conv.posterId;
-        final otherName = isCurrentUserPoster
-            ? conv.seekerName
-            : conv.posterName;
+        final otherName = conv.otherPartyName(currentUserId);
         final chatRoomId = 'chat_${conv.jobId}';
-
-        // Fetch last message for this chat room
-        String? lastMessageText;
-        String? lastMessageSenderId;
-        DateTime? lastMessageTime;
-        int unreadCount = 0;
-
-        try {
-          final msgQuery = QueryBuilder<ParseObject>(
-              ParseObject(Back4AppConfig.messageClass))
-            ..whereEqualTo('chatRoomId', chatRoomId)
-            ..orderByDescending('createdAt')
-            ..setLimit(1);
-
-          final msgResponse = await msgQuery.query();
-          if (msgResponse.success &&
-              msgResponse.results != null &&
-              msgResponse.results!.isNotEmpty) {
-            final lastMsg = msgResponse.results!.first as ParseObject;
-            lastMessageText = lastMsg.get<String>('content');
-            lastMessageSenderId = lastMsg.get<String>('senderId');
-            lastMessageTime = lastMsg.createdAt;
-          }
-
-          // Count unread
-          final unreadQuery = QueryBuilder<ParseObject>(
-              ParseObject(Back4AppConfig.messageClass))
-            ..whereEqualTo('chatRoomId', chatRoomId)
-            ..whereEqualTo('isRead', false)
-            ..whereNotEqualTo('senderId', currentUserId);
-          final unreadResponse = await unreadQuery.count();
-          if (unreadResponse.success) {
-            unreadCount = unreadResponse.count;
-          }
-        } catch (_) {}
 
         entries.add(_ChatEntry(
           conversation: conv,
           otherPartyName: otherName,
           chatRoomId: chatRoomId,
-          lastMessageText: lastMessageText,
-          lastMessageSenderId: lastMessageSenderId,
-          lastMessageTime:
-              lastMessageTime ?? conv.lastMessageAt ?? conv.createdAt,
-          unreadCount: unreadCount,
+          lastMessageText: conv.lastMessageText,
+          lastMessageSenderId: conv.lastMessageSenderId,
+          lastMessageTime: conv.lastMessageAt ?? conv.createdAt,
           currentUserId: currentUserId,
         ));
       }
@@ -121,7 +81,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
         }
       }
 
-      // Sort by last message time (newest first)
       final unique = seen.values.toList()
         ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
 
@@ -274,7 +233,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final isToday = chat.lastMessageTime.day == now.day &&
         chat.lastMessageTime.month == now.month &&
         chat.lastMessageTime.year == now.year;
-    final hasUnread = chat.unreadCount > 0;
+    final hasUnread = chat.hasNewMessage;
 
     // Build last message preview
     String preview;
@@ -381,18 +340,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
               if (hasUnread)
                 Container(
                   margin: const EdgeInsets.only(left: 8),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 7, vertical: 3),
+                  width: 10,
+                  height: 10,
                   decoration: const BoxDecoration(
                     color: AppColors.amber600,
                     shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    '${chat.unreadCount}',
-                    style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold),
                   ),
                 ),
             ],
@@ -423,7 +375,6 @@ class _ChatEntry {
   final String? lastMessageText;
   final String? lastMessageSenderId;
   final DateTime lastMessageTime;
-  final int unreadCount;
   final String currentUserId;
 
   _ChatEntry({
@@ -433,7 +384,10 @@ class _ChatEntry {
     this.lastMessageText,
     this.lastMessageSenderId,
     required this.lastMessageTime,
-    this.unreadCount = 0,
     required this.currentUserId,
   });
+
+  /// Whether the last message was sent by the other party (potential unread).
+  bool get hasNewMessage =>
+      lastMessageSenderId != null && lastMessageSenderId != currentUserId;
 }

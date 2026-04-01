@@ -3,13 +3,15 @@ import 'package:provider/provider.dart';
 import '../utils/colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notifications_provider.dart';
+import '../screens/chat_list_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/login_screen.dart';
 
 class HeaderWidget extends StatelessWidget {
   final VoidCallback? onMenuTap;
+  final VoidCallback? onChatTap;
 
-  const HeaderWidget({super.key, this.onMenuTap});
+  const HeaderWidget({super.key, this.onMenuTap, this.onChatTap});
 
   @override
   Widget build(BuildContext context) {
@@ -42,11 +44,7 @@ class HeaderWidget extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.menu,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+                  child: const Icon(Icons.menu, color: Colors.white, size: 20),
                 ),
               ),
               const SizedBox(width: 12),
@@ -96,25 +94,25 @@ class HeaderWidget extends StatelessWidget {
               ),
             ],
           ),
-          // Notification Button
-          GestureDetector(
-            onTap: () {
-              if (!authProvider.isAuthenticated) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-                return;
-              }
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-              );
-            },
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
+          // Chat + Notification buttons
+          Row(
+            children: [
+              // Chat Button
+              GestureDetector(
+                onTap: () {
+                  if (onChatTap != null) {
+                    onChatTap!();
+                  } else if (!authProvider.isAuthenticated) {
+                    Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()));
+                  } else {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ChatListScreen()));
+                  }
+                },
+                child: Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
@@ -122,36 +120,72 @@ class HeaderWidget extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
-                    Icons.notifications_outlined,
+                    Icons.chat_bubble_outline,
                     color: AppColors.gray700,
                     size: 20,
                   ),
                 ),
-                if (notifProvider.unreadCount > 0)
-                  Positioned(
-                    right: -4,
-                    top: -4,
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: const BoxDecoration(
-                        color: AppColors.red500,
-                        shape: BoxShape.circle,
+              ),
+              const SizedBox(width: 8),
+              // Notification Button
+              GestureDetector(
+                onTap: () {
+                  if (!authProvider.isAuthenticated) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    );
+                    return;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen()),
+                  );
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.gray100,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Center(
-                        child: Text(
-                          '${notifProvider.unreadCount}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                      child: const Icon(
+                        Icons.notifications_outlined,
+                        color: AppColors.gray700,
+                        size: 20,
+                      ),
+                    ),
+                    if (notifProvider.unreadCount > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: const BoxDecoration(
+                            color: AppColors.red500,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${notifProvider.unreadCount}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
-            ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

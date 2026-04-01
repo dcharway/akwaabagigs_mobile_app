@@ -467,6 +467,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   onMenuTap: () {
                     _scaffoldKey.currentState?.openDrawer();
                   },
+                  onChatTap: () {
+                    setState(() => _currentIndex = 3); // Chat tab
+                  },
                 ),
 
                 // Search Bar
