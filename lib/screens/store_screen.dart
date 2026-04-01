@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
+import '../config/back4app_config.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
@@ -20,6 +22,8 @@ class _StoreScreenState extends State<StoreScreen> {
   bool _isLoading = true;
   String? _selectedCategory;
   bool _isAdmin = false;
+  LiveQuery? _liveQuery;
+  Subscription? _productSubscription;
 
   static const List<String> _categories = [
     'Fashion',
@@ -36,6 +40,34 @@ class _StoreScreenState extends State<StoreScreen> {
     super.initState();
     _loadProducts();
     _checkAdmin();
+    _subscribeLiveQuery();
+  }
+
+  @override
+  void dispose() {
+    if (_liveQuery != null && _productSubscription != null) {
+      _liveQuery!.client.unSubscribe(_productSubscription!);
+    }
+    super.dispose();
+  }
+
+  /// LiveQuery: auto-refresh when any product is created/updated/deleted.
+  Future<void> _subscribeLiveQuery() async {
+    try {
+      _liveQuery = LiveQuery();
+      final query = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.productClass));
+      _productSubscription = await _liveQuery!.client.subscribe(query);
+      _productSubscription!.on(LiveQueryEvent.create, (_) {
+        if (mounted) _loadProducts();
+      });
+      _productSubscription!.on(LiveQueryEvent.update, (_) {
+        if (mounted) _loadProducts();
+      });
+      _productSubscription!.on(LiveQueryEvent.delete, (_) {
+        if (mounted) _loadProducts();
+      });
+    } catch (_) {}
   }
 
   Future<void> _checkAdmin() async {

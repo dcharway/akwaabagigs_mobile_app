@@ -289,7 +289,21 @@ Future<void> main() async {
     'createdBy': '_seed_',
   });
 
-  // 14. Add firstName/lastName to _User class (by creating a temp user)
+  // 14. Inventory class
+  print('Creating Inventory class...');
+  seedIds['Inventory'] = await createObject('Inventory', {
+    'productId': '_seed_',
+    'productName': '_seed_',
+    'quantity': 0,
+    'restockThreshold': 5,
+    'location': 'Main Warehouse',
+    'lastUpdatedBy': '_seed_',
+    'lastUpdatedAt': '_seed_',
+    'lastAdjustmentReason': '_seed_',
+    'lastAdjustmentAmount': 0,
+  });
+
+  // 15. Add firstName/lastName to _User class (by creating a temp user)
   print('\nAdding custom fields to _User class...');
   final userResponse = await http.post(
     Uri.parse('$serverUrl/users'),
@@ -340,7 +354,7 @@ Future<void> main() async {
     }
   }
 
-  print('\nDone! All 13 Parse classes have been created on Back4App.');
-  print('Classes: Job, Application, Conversation, Message, GigSeeker, GigPoster, Rating, Payment, Escrow, Subscription, Product, StoreOrder, VideoAd');
+  print('\nDone! All 14 Parse classes have been created on Back4App.');
+  print('Classes: Job, Application, Conversation, Message, GigSeeker, GigPoster, Rating, Payment, Escrow, Subscription, Product, StoreOrder, VideoAd, Inventory');
   print('\nYou can verify them in your Back4App dashboard.');
 }

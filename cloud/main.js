@@ -384,6 +384,39 @@ Parse.Cloud.beforeDelete('VideoAd', async (request) => {
   }
 });
 
+// ============ INVENTORY: ADMIN-ONLY + LOW STOCK ALERTS ============
+
+/**
+ * beforeSave on Inventory: Only admins can write.
+ */
+Parse.Cloud.beforeSave('Inventory', async (request) => {
+  if (request.master) return;
+  const user = request.user;
+  if (!user) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Authentication required');
+  }
+  const userQuery = new Parse.Query(Parse.User);
+  const fullUser = await userQuery.get(user.id, { useMasterKey: true });
+  if (!fullUser.get('isAdmin')) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'Admin access required');
+  }
+});
+
+/**
+ * afterSave on Inventory: Check for low stock and log alert.
+ */
+Parse.Cloud.afterSave('Inventory', async (request) => {
+  const inv = request.object;
+  const qty = inv.get('quantity') || 0;
+  const threshold = inv.get('restockThreshold') || 5;
+  const productName = inv.get('productName') || 'Unknown product';
+
+  if (qty <= threshold) {
+    console.log(`LOW STOCK ALERT: ${productName} has ${qty} units (threshold: ${threshold})`);
+    // In production, send push notification or email to admins here
+  }
+});
+
 // ============ CUSTOMER SUPPORT CHATBOT ============
 
 /**
