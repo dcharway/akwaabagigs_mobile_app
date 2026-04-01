@@ -406,7 +406,7 @@ class ApiService {
     // Check for existing conversation with same participants + job
     final existingQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
-      ..whereContainsAll('participants', participantsList)
+      ..whereArrayContainsAll('participants', participantsList)
       ..whereEqualTo('jobId', jobId);
 
     final existingResponse = await existingQuery.query();
