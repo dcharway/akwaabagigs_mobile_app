@@ -6,9 +6,14 @@ class Conversation {
   final String posterName;
   final String seekerEmail;
   final String seekerName;
-  final String participantA;
-  final String participantB;
+  /// Array of user IDs in this conversation (many-to-many).
+  final List<String> participants;
+  /// Display names keyed by userId for rendering.
+  final Map<String, String> participantNames;
+  final String? lastMessageText;
+  final String? lastMessageSenderId;
   final DateTime? lastMessageAt;
+  final int messageCount;
   final DateTime createdAt;
 
   Conversation({
@@ -19,13 +24,64 @@ class Conversation {
     required this.posterName,
     required this.seekerEmail,
     required this.seekerName,
-    required this.participantA,
-    required this.participantB,
+    required this.participants,
+    this.participantNames = const {},
+    this.lastMessageText,
+    this.lastMessageSenderId,
     this.lastMessageAt,
+    this.messageCount = 0,
     required this.createdAt,
   });
 
+  /// Check if a user is part of this conversation.
+  bool hasParticipant(String userId) => participants.contains(userId);
+
+  /// Get the display name for a participant.
+  String nameOf(String userId) => participantNames[userId] ?? 'Unknown';
+
+  /// Get the "other" party name given the current user's ID.
+  String otherPartyName(String currentUserId) {
+    // Find the first participant that isn't the current user
+    for (final uid in participants) {
+      if (uid != currentUserId) {
+        return participantNames[uid] ?? 'Unknown';
+      }
+    }
+    // Fallback to legacy fields
+    if (currentUserId == posterId) return seekerName;
+    return posterName;
+  }
+
   factory Conversation.fromJson(Map<String, dynamic> json) {
+    // Parse participants array — support both new array and legacy A/B fields
+    List<String> participants;
+    if (json['participants'] is List) {
+      participants = List<String>.from(json['participants']);
+    } else {
+      // Build from legacy fields
+      final a = json['participantA'] ?? json['posterId'] ?? '';
+      final b = json['participantB'] ?? json['seekerEmail'] ?? '';
+      participants = [if (a.isNotEmpty) a, if (b.isNotEmpty) b];
+    }
+
+    // Parse participant names map
+    Map<String, String> participantNames;
+    if (json['participantNames'] is Map) {
+      participantNames = Map<String, String>.from(json['participantNames']);
+    } else {
+      participantNames = {};
+      final posterId = json['posterId'] ?? '';
+      final posterName = json['posterName'] ?? '';
+      final seekerEmail = json['seekerEmail'] ?? '';
+      final seekerName = json['seekerName'] ?? '';
+      if (posterId.isNotEmpty && posterName.isNotEmpty) {
+        participantNames[posterId] = posterName;
+      }
+      if (seekerEmail.isNotEmpty && seekerName.isNotEmpty) {
+        participantNames[seekerEmail] = seekerName;
+      }
+    }
+
     return Conversation(
       id: json['id'] ?? '',
       jobId: json['jobId'],
@@ -34,11 +90,14 @@ class Conversation {
       posterName: json['posterName'] ?? '',
       seekerEmail: json['seekerEmail'] ?? '',
       seekerName: json['seekerName'] ?? '',
-      participantA: json['participantA'] ?? json['posterId'] ?? '',
-      participantB: json['participantB'] ?? json['seekerEmail'] ?? '',
+      participants: participants,
+      participantNames: participantNames,
+      lastMessageText: json['lastMessageText'],
+      lastMessageSenderId: json['lastMessageSenderId'],
       lastMessageAt: json['lastMessageAt'] != null
           ? DateTime.tryParse(json['lastMessageAt'])
           : null,
+      messageCount: json['messageCount'] ?? 0,
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
     );
   }
@@ -52,9 +111,12 @@ class Conversation {
       'posterName': posterName,
       'seekerEmail': seekerEmail,
       'seekerName': seekerName,
-      'participantA': participantA,
-      'participantB': participantB,
+      'participants': participants,
+      'participantNames': participantNames,
+      'lastMessageText': lastMessageText,
+      'lastMessageSenderId': lastMessageSenderId,
       'lastMessageAt': lastMessageAt?.toIso8601String(),
+      'messageCount': messageCount,
       'createdAt': createdAt.toIso8601String(),
     };
   }

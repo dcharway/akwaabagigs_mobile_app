@@ -369,6 +369,29 @@ class _LiveChatScreenState extends State<LiveChatScreen>
             }
           });
         }
+
+        // 4. Update the Conversation record with last message info
+        try {
+          final convQuery = QueryBuilder<ParseObject>(
+              ParseObject(Back4AppConfig.conversationClass))
+            ..whereEqualTo('participants', user.objectId)
+            ..whereEqualTo('jobId', widget.jobId)
+            ..setLimit(1);
+          final convResponse = await convQuery.query();
+          if (convResponse.success &&
+              convResponse.results != null &&
+              convResponse.results!.isNotEmpty) {
+            final conv = convResponse.results!.first as ParseObject;
+            conv
+              ..set('lastMessageText', text)
+              ..set('lastMessageSenderId', user.objectId)
+              ..set('lastMessageAt', DateTime.now().toIso8601String());
+            conv.setIncrement('messageCount', 1);
+            await conv.save();
+          }
+        } catch (_) {
+          // Non-critical — chat list preview may be stale
+        }
       } else {
         debugPrint(
             'Message save failed: ${response.error?.code} ${response.error?.message}');

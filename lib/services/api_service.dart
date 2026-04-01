@@ -328,32 +328,32 @@ class ApiService {
     final user = await ParseUser.currentUser() as ParseUser?;
     if (user == null) throw Exception('Not authenticated');
 
-    // Get conversations where user is either participant
-    final participantAQuery = QueryBuilder<ParseObject>(
+    // Primary: query by participants array (many-to-many)
+    final participantsQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.conversationClass))
+      ..whereEqualTo('participants', user.objectId);
+
+    // Fallback: legacy participantA/participantB/posterId/seekerEmail
+    final legacyAQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('participantA', user.objectId);
-
-    final participantBQuery = QueryBuilder<ParseObject>(
+    final legacyBQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('participantB', user.objectId);
-
-    // Also check legacy fields for backward compatibility
     final posterQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('posterId', user.objectId);
-
     final seekerQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('seekerEmail', user.emailAddress);
 
     final mainQuery = QueryBuilder.or(
         ParseObject(Back4AppConfig.conversationClass),
-        [participantAQuery, participantBQuery, posterQuery, seekerQuery])
+        [participantsQuery, legacyAQuery, legacyBQuery, posterQuery, seekerQuery])
       ..orderByDescending('lastMessageAt');
 
     final response = await mainQuery.query();
     if (response.success && response.results != null) {
-      // Deduplicate by objectId in case multiple queries match same conversation
       final seen = <String>{};
       final conversations = <Conversation>[];
       for (final e in response.results!) {
@@ -389,18 +389,30 @@ class ApiService {
     final participantA = posterId;
     final participantB = resolvedSeekerEmail;
 
-    // Check for existing conversation between these participants for this job
+    // Build participants list (many-to-many array of user IDs)
+    final participantsList = <String>{participantA, participantB}
+        .where((p) => p.isNotEmpty)
+        .toList();
+
+    // Build participant names map
+    final participantNamesMap = <String, String>{};
+    if (participantA.isNotEmpty && posterName.isNotEmpty) {
+      participantNamesMap[participantA] = posterName;
+    }
+    if (participantB.isNotEmpty && resolvedSeekerName.isNotEmpty) {
+      participantNamesMap[participantB] = resolvedSeekerName;
+    }
+
+    // Check for existing conversation with same participants + job
     final existingQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
-      ..whereEqualTo('participantA', participantA)
-      ..whereEqualTo('participantB', participantB)
+      ..whereContainsAll('participants', participantsList)
       ..whereEqualTo('jobId', jobId);
 
     final existingResponse = await existingQuery.query();
     if (existingResponse.success &&
         existingResponse.results != null &&
         existingResponse.results!.isNotEmpty) {
-      // Return existing conversation instead of creating a duplicate
       return Conversation.fromJson(_parseObjectToConversationMap(
           existingResponse.results!.first as ParseObject));
     }
@@ -411,11 +423,15 @@ class ApiService {
       ..set('posterName', posterName)
       ..set('seekerEmail', resolvedSeekerEmail)
       ..set('seekerName', resolvedSeekerName)
+      // New: many-to-many participants array
+      ..set('participants', participantsList)
+      ..set('participantNames', participantNamesMap)
+      // Legacy compat
       ..set('participantA', participantA)
       ..set('participantB', participantB)
-      ..set('lastMessageAt', DateTime.now().toIso8601String());
+      ..set('lastMessageAt', DateTime.now().toIso8601String())
+      ..set('messageCount', 0);
 
-    // ACL: both participants can read/write
     final convAcl = ParseACL()
       ..setPublicReadAccess(allowed: true)
       ..setPublicWriteAccess(allowed: true);
@@ -479,10 +495,13 @@ class ApiService {
 
     final response = await message.save();
     if (response.success && response.result != null) {
-      // Update conversation's lastMessageAt
+      // Update conversation: last message info + increment count
       final conversation = ParseObject(Back4AppConfig.conversationClass)
         ..objectId = conversationId
-        ..set('lastMessageAt', DateTime.now().toIso8601String());
+        ..set('lastMessageAt', DateTime.now().toIso8601String())
+        ..set('lastMessageText', content)
+        ..set('lastMessageSenderId', user.objectId);
+      conversation.setIncrement('messageCount', 1);
       await conversation.save();
 
       return Message.fromJson(
@@ -1809,9 +1828,16 @@ class ApiService {
       'posterName': obj.get<String>('posterName') ?? '',
       'seekerEmail': obj.get<String>('seekerEmail') ?? '',
       'seekerName': obj.get<String>('seekerName') ?? '',
+      'participants': obj.get<List>('participants')?.cast<String>() ?? [],
+      'participantNames': obj.get<Map>('participantNames') != null
+          ? Map<String, String>.from(obj.get<Map>('participantNames')!)
+          : <String, String>{},
       'participantA': obj.get<String>('participantA') ?? '',
       'participantB': obj.get<String>('participantB') ?? '',
+      'lastMessageText': obj.get<String>('lastMessageText'),
+      'lastMessageSenderId': obj.get<String>('lastMessageSenderId'),
       'lastMessageAt': obj.get<String>('lastMessageAt'),
+      'messageCount': obj.get<int>('messageCount') ?? 0,
       'createdAt': obj.createdAt?.toIso8601String() ?? '',
     };
   }

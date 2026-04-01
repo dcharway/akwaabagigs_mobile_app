@@ -113,7 +113,12 @@ Future<void> main() async {
     'seekerName': '_seed_',
     'participantA': '_seed_',
     'participantB': '_seed_',
+    'participants': ['_seed_'],
+    'participantNames': {'_seed_': '_seed_'},
     'lastMessageAt': '_seed_',
+    'lastMessageText': '_seed_',
+    'lastMessageSenderId': '_seed_',
+    'messageCount': 0,
   });
 
   // 4. Message class
