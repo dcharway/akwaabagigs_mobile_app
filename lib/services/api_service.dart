@@ -1223,6 +1223,160 @@ class ApiService {
     }
   }
 
+  // ============ INVENTORY ============
+
+  /// Get all inventory records (admin view).
+  static Future<List<Map<String, dynamic>>> getInventory() async {
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.inventoryClass))
+      ..orderByAscending('productName');
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => _parseObjectToInventoryMap(e as ParseObject))
+          .toList();
+    }
+    return [];
+  }
+
+  /// Get low-stock inventory items (below restock threshold).
+  static Future<List<Map<String, dynamic>>> getLowStockItems() async {
+    // Fetch all inventory and filter client-side since Parse SDK
+    // doesn't support field-to-field comparison in queries
+    final all = await getInventory();
+    return all
+        .where((item) =>
+            (item['quantity'] as int) <= (item['restockThreshold'] as int))
+        .toList();
+  }
+
+  /// Create inventory record for a product (admin only).
+  static Future<Map<String, dynamic>> createInventory({
+    required String productId,
+    required String productName,
+    required int quantity,
+    int restockThreshold = 5,
+    String? location,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final inv = ParseObject(Back4AppConfig.inventoryClass)
+      ..set('productId', productId)
+      ..set('productName', productName)
+      ..set('quantity', quantity)
+      ..set('restockThreshold', restockThreshold)
+      ..set('location', location ?? 'Main Warehouse')
+      ..set('lastUpdatedBy', user.objectId)
+      ..set('lastUpdatedAt', DateTime.now().toIso8601String());
+
+    final acl = ParseACL()
+      ..setPublicReadAccess(allowed: true)
+      ..setPublicWriteAccess(allowed: true);
+    inv.setACL(acl);
+
+    final response = await inv.save();
+    if (response.success && response.result != null) {
+      return _parseObjectToInventoryMap(response.result as ParseObject);
+    }
+    throw Exception(
+        'Failed to create inventory: ${response.error?.message}');
+  }
+
+  /// Adjust stock quantity (add or subtract). Also syncs Product.stock.
+  static Future<void> adjustStock({
+    required String inventoryId,
+    required String productId,
+    required int adjustment, // positive = restock, negative = sold/removed
+    required String reason, // 'restock', 'sale', 'damage', 'correction'
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    // Update Inventory record
+    final inv = ParseObject(Back4AppConfig.inventoryClass)
+      ..objectId = inventoryId;
+    inv.setIncrement('quantity', adjustment);
+    inv.set('lastUpdatedBy', user.objectId);
+    inv.set('lastUpdatedAt', DateTime.now().toIso8601String());
+    inv.set('lastAdjustmentReason', reason);
+    inv.set('lastAdjustmentAmount', adjustment);
+
+    final invResponse = await inv.save();
+    if (!invResponse.success) {
+      throw Exception(
+          'Failed to adjust inventory: ${invResponse.error?.message}');
+    }
+
+    // Sync Product.stock to match
+    final product = ParseObject(Back4AppConfig.productClass)
+      ..objectId = productId;
+    product.setIncrement('stock', adjustment);
+    await product.save();
+  }
+
+  /// Update inventory fields (threshold, location).
+  static Future<void> updateInventory(
+      String id, Map<String, dynamic> updates) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final inv = ParseObject(Back4AppConfig.inventoryClass)..objectId = id;
+    updates.forEach((key, value) => inv.set(key, value));
+    inv.set('lastUpdatedBy', user.objectId);
+    inv.set('lastUpdatedAt', DateTime.now().toIso8601String());
+
+    final response = await inv.save();
+    if (!response.success) {
+      throw Exception(
+          'Failed to update inventory: ${response.error?.message}');
+    }
+  }
+
+  /// Update product price (admin only). Separate from stock for clarity.
+  static Future<void> updateProductPrice(
+      String productId, int newPricePesewas) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final product = ParseObject(Back4AppConfig.productClass)
+      ..objectId = productId
+      ..set('pricePesewas', newPricePesewas);
+    final response = await product.save();
+    if (!response.success) {
+      throw Exception('Failed to update price: ${response.error?.message}');
+    }
+  }
+
+  static Map<String, dynamic> _parseObjectToInventoryMap(ParseObject obj) {
+    return {
+      'id': obj.objectId ?? '',
+      'productId': obj.get<String>('productId') ?? '',
+      'productName': obj.get<String>('productName') ?? '',
+      'quantity': obj.get<int>('quantity') ?? 0,
+      'restockThreshold': obj.get<int>('restockThreshold') ?? 5,
+      'location': obj.get<String>('location') ?? 'Main Warehouse',
+      'lastUpdatedBy': obj.get<String>('lastUpdatedBy'),
+      'lastUpdatedAt': obj.get<String>('lastUpdatedAt'),
+      'lastAdjustmentReason': obj.get<String>('lastAdjustmentReason'),
+      'lastAdjustmentAmount': obj.get<int>('lastAdjustmentAmount'),
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+    };
+  }
+
   // ============ VIDEO ADS ============
 
   /// Get currently scheduled ads that should be playing right now
