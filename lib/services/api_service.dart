@@ -384,10 +384,28 @@ class ApiService {
         seekerName ?? user.get<String>('firstName') ?? '';
 
     // Determine participantA (poster) and participantB (seeker)
-    // participantA is always the poster's userId
-    // participantB is the seeker's userId (or email as fallback identifier)
+    // Both should be user objectIds for consistent querying
     final participantA = posterId;
-    final participantB = resolvedSeekerEmail;
+    // Try to resolve seeker's userId from their email
+    String participantB = user.objectId ?? resolvedSeekerEmail;
+    if (seekerEmail != null && seekerEmail != user.emailAddress) {
+      // The caller is the poster — resolve seeker's userId from email
+      try {
+        final seekerUserQuery = QueryBuilder<ParseUser>(ParseUser.forQuery())
+          ..whereEqualTo('email', resolvedSeekerEmail);
+        final seekerUserResponse = await seekerUserQuery.query();
+        if (seekerUserResponse.success &&
+            seekerUserResponse.results != null &&
+            seekerUserResponse.results!.isNotEmpty) {
+          participantB =
+              (seekerUserResponse.results!.first as ParseUser).objectId ??
+                  resolvedSeekerEmail;
+        }
+      } catch (_) {
+        // Fall back to email if user lookup fails
+        participantB = resolvedSeekerEmail;
+      }
+    }
 
     // Build participants list (many-to-many array of user IDs)
     final participantsList = <String>{participantA, participantB}
@@ -502,6 +520,10 @@ class ApiService {
         ..set('lastMessageText', content)
         ..set('lastMessageSenderId', user.objectId);
       conversation.setIncrement('messageCount', 1);
+      final convAcl = ParseACL()
+        ..setPublicReadAccess(allowed: true)
+        ..setPublicWriteAccess(allowed: true);
+      conversation.setACL(convAcl);
       await conversation.save();
 
       return Message.fromJson(
