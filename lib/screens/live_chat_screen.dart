@@ -19,6 +19,13 @@ class LiveChatScreen extends StatefulWidget {
   final String otherPartyName;
   /// If known, pass the Conversation objectId directly to skip lookup.
   final String? conversationId;
+  /// The job poster's user objectId.
+  final String? posterId;
+  /// The job poster's display name.
+  final String? posterName;
+  /// The other participant's user objectId (seeker or poster, depending on
+  /// which side opened the chat).
+  final String? otherPartyId;
 
   const LiveChatScreen({
     super.key,
@@ -26,6 +33,9 @@ class LiveChatScreen extends StatefulWidget {
     required this.jobTitle,
     required this.otherPartyName,
     this.conversationId,
+    this.posterId,
+    this.posterName,
+    this.otherPartyId,
   });
 
   @override
@@ -325,10 +335,41 @@ class _LiveChatScreenState extends State<LiveChatScreen>
     // 0. Ensure conversation exists — create on first message
     if (_resolvedConversationId == null || _resolvedConversationId!.isEmpty) {
       try {
+        // Determine participant IDs: the current user and the other party.
+        final currentUserId = user.objectId ?? '';
+        final posterId = widget.posterId ?? '';
+        final posterName = widget.posterName ?? '';
+        // The other party is either explicitly provided, or inferred as the
+        // poster when the current user is the seeker.
+        final otherPartyId = widget.otherPartyId ??
+            (posterId.isNotEmpty && posterId != currentUserId
+                ? posterId
+                : '');
+
+        if (currentUserId.isEmpty ||
+            (otherPartyId.isEmpty && posterId.isEmpty)) {
+          debugPrint(
+              'Cannot create conversation: missing participant IDs');
+          return;
+        }
+
+        // participantA is always the poster, participantB is the seeker.
+        final resolvedPosterId =
+            posterId.isNotEmpty ? posterId : currentUserId;
+        final resolvedSeekerId = resolvedPosterId == currentUserId
+            ? otherPartyId
+            : currentUserId;
+
         final conv = await ApiService.createConversation(
           jobId: widget.jobId,
-          posterId: '', // Will be filled by the API from context
-          posterName: '',
+          participantAId: resolvedPosterId,
+          participantBId: resolvedSeekerId,
+          posterId: resolvedPosterId,
+          posterName: posterName.isNotEmpty ? posterName : senderName,
+          seekerId: resolvedSeekerId,
+          seekerName: resolvedPosterId == currentUserId
+              ? widget.otherPartyName
+              : senderName,
         );
         _resolvedConversationId = conv.id;
         _setupLiveQuery(); // Start listening now
