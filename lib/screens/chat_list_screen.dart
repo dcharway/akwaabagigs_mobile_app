@@ -58,12 +58,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
       for (final conv in conversations) {
         final otherName = conv.otherPartyName(currentUserId);
-        final chatRoomId = 'chat_${conv.jobId}';
-
         entries.add(_ChatEntry(
           conversation: conv,
           otherPartyName: otherName,
-          chatRoomId: chatRoomId,
+          chatRoomId: conv.id, // Use Conversation objectId as unique key
           lastMessageText: conv.lastMessageText,
           lastMessageSenderId: conv.lastMessageSenderId,
           lastMessageTime: conv.lastMessageAt ?? conv.createdAt,
