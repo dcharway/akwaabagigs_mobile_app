@@ -12,7 +12,7 @@ import '../utils/colors.dart';
 ///
 /// Access control: Only participants in the Conversation can see/send messages.
 /// Messages are stored with the Conversation's objectId as the foreign key.
-/// LiveQuery on the chatRoomId channel provides instant delivery.
+/// LiveQuery on conversationId provides instant delivery.
 class LiveChatScreen extends StatefulWidget {
   final String jobId;
   final String jobTitle;
@@ -48,11 +48,10 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   bool _showScrollToBottom = false;
   String _currentUserId = '';
 
-  /// The Conversation's objectId — used as the foreign key on every message.
+  /// The Conversation's objectId — the SINGLE key for all messages.
+  /// Every message is stored with conversationId = this value.
+  /// LiveQuery subscribes to messages WHERE conversationId = this value.
   String? _resolvedConversationId;
-
-  /// The LiveQuery channel ID — always 'chat_{jobId}'.
-  String get _chatRoomId => 'chat_${widget.jobId}';
 
   LiveQuery? _liveQuery;
   Subscription? _messageSubscription;
@@ -128,12 +127,15 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   // ============ MESSAGE LOADING ============
 
   Future<void> _loadMessages() async {
+    if (_resolvedConversationId == null || _resolvedConversationId!.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return; // No conversation yet — will be created on first send
+    }
     setState(() => _isLoading = true);
     try {
-      // Query by chatRoomId (the channel) — this matches how messages are saved
       final query = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.messageClass))
-        ..whereEqualTo('chatRoomId', _chatRoomId)
+        ..whereEqualTo('conversationId', _resolvedConversationId)
         ..orderByDescending('createdAt')
         ..setLimit(_pageSize);
 
@@ -155,13 +157,13 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   }
 
   Future<void> _loadOlderMessages() async {
-    if (_messages.isEmpty || !_hasMoreHistory) return;
+    if (_messages.isEmpty || !_hasMoreHistory || _resolvedConversationId == null) return;
     setState(() => _isLoadingMore = true);
     try {
       final oldest = _messages.first;
       final query = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.messageClass))
-        ..whereEqualTo('chatRoomId', _chatRoomId)
+        ..whereEqualTo('conversationId', _resolvedConversationId)
         ..whereLessThan('createdAt', oldest.createdAt!.toIso8601String())
         ..orderByDescending('createdAt')
         ..setLimit(_pageSize);
@@ -185,6 +187,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   }
 
   Future<void> _refreshNewMessages() async {
+    if (_resolvedConversationId == null) return;
     if (_messages.isEmpty) {
       _loadMessages();
       return;
@@ -193,7 +196,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
       final newest = _messages.last;
       final query = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.messageClass))
-        ..whereEqualTo('chatRoomId', _chatRoomId)
+        ..whereEqualTo('conversationId', _resolvedConversationId)
         ..whereGreaterThan('createdAt', newest.createdAt!.toIso8601String())
         ..orderByAscending('createdAt');
 
@@ -221,11 +224,14 @@ class _LiveChatScreenState extends State<LiveChatScreen>
 
   Future<void> _setupLiveQuery() async {
     _unsubscribeLiveQuery();
+    if (_resolvedConversationId == null || _resolvedConversationId!.isEmpty) {
+      return;
+    }
     try {
       _liveQuery = LiveQuery();
       final query = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.messageClass))
-        ..whereEqualTo('chatRoomId', _chatRoomId);
+        ..whereEqualTo('conversationId', _resolvedConversationId);
 
       _messageSubscription = await _liveQuery!.client.subscribe(query);
 
@@ -316,11 +322,26 @@ class _LiveChatScreenState extends State<LiveChatScreen>
         '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'
             .trim();
 
+    // 0. Ensure conversation exists — create on first message
+    if (_resolvedConversationId == null || _resolvedConversationId!.isEmpty) {
+      try {
+        final conv = await ApiService.createConversation(
+          jobId: widget.jobId,
+          posterId: '', // Will be filled by the API from context
+          posterName: '',
+        );
+        _resolvedConversationId = conv.id;
+        _setupLiveQuery(); // Start listening now
+      } catch (e) {
+        debugPrint('Failed to create conversation: $e');
+        return;
+      }
+    }
+
     // 1. Show optimistic message IMMEDIATELY
     final localId = '_local_${DateTime.now().microsecondsSinceEpoch}';
     final localMsg = ParseObject(Back4AppConfig.messageClass)
-      ..set('chatRoomId', _chatRoomId)
-      ..set('conversationId', _resolvedConversationId ?? _chatRoomId)
+      ..set('conversationId', _resolvedConversationId ?? '')
       ..set('senderId', user.objectId)
       ..set('senderName', senderName)
       ..set('content', text)
@@ -333,8 +354,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
     // 2. Save to Back4App
     try {
       final serverMsg = ParseObject(Back4AppConfig.messageClass)
-        ..set('chatRoomId', _chatRoomId)
-        ..set('conversationId', _resolvedConversationId ?? _chatRoomId)
+        ..set('conversationId', _resolvedConversationId ?? '')
         ..set('senderId', user.objectId)
         ..set('senderName', senderName)
         ..set('content', text)
@@ -373,43 +393,24 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   /// Update the parent Conversation with last message info.
   Future<void> _updateConversationAfterSend(
       String text, String senderId) async {
+    final convId = _resolvedConversationId;
+    if (convId == null || convId.isEmpty) return;
+
     try {
-      String? convId = _resolvedConversationId;
+      final conv = ParseObject(Back4AppConfig.conversationClass)
+        ..objectId = convId
+        ..set('lastMessageText', text)
+        ..set('lastMessageSenderId', senderId)
+        ..set('lastMessageAt', DateTime.now().toIso8601String());
+      conv.setIncrement('messageCount', 1);
 
-      // If we don't have a resolved ID, find it
-      if (convId == null || convId.isEmpty) {
-        final convQuery = QueryBuilder<ParseObject>(
-            ParseObject(Back4AppConfig.conversationClass))
-          ..whereEqualTo('participants', _currentUserId)
-          ..whereEqualTo('jobId', widget.jobId)
-          ..setLimit(1);
-        final convResponse = await convQuery.query();
-        if (convResponse.success &&
-            convResponse.results != null &&
-            convResponse.results!.isNotEmpty) {
-          convId = convResponse.results!.first.objectId;
-          _resolvedConversationId = convId;
-        }
-      }
+      final acl = ParseACL()
+        ..setPublicReadAccess(allowed: true)
+        ..setPublicWriteAccess(allowed: true);
+      conv.setACL(acl);
 
-      if (convId != null && convId.isNotEmpty) {
-        final conv = ParseObject(Back4AppConfig.conversationClass)
-          ..objectId = convId
-          ..set('lastMessageText', text)
-          ..set('lastMessageSenderId', senderId)
-          ..set('lastMessageAt', DateTime.now().toIso8601String());
-        conv.setIncrement('messageCount', 1);
-
-        final acl = ParseACL()
-          ..setPublicReadAccess(allowed: true)
-          ..setPublicWriteAccess(allowed: true);
-        conv.setACL(acl);
-
-        await conv.save();
-      }
-    } catch (_) {
-      // Non-critical — chat list preview may be stale
-    }
+      await conv.save();
+    } catch (_) {}
   }
 
   void _markAsFailed(String localId) {
