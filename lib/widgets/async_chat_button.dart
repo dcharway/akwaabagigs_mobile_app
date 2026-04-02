@@ -78,6 +78,8 @@ class _AsyncChatButtonState extends State<AsyncChatButton> {
           jobId: widget.job.id,
           jobTitle: widget.job.title,
           otherPartyName: widget.otherPartyName,
+          posterId: widget.job.posterId,
+          posterName: widget.job.postedBy,
         ),
       ),
     );

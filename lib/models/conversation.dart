@@ -4,6 +4,7 @@ class Conversation {
   final String? jobTitle;
   final String posterId;
   final String posterName;
+  final String? seekerId;
   final String seekerEmail;
   final String seekerName;
   /// Array of user IDs in this conversation (many-to-many).
@@ -22,6 +23,7 @@ class Conversation {
     this.jobTitle,
     required this.posterId,
     required this.posterName,
+    this.seekerId,
     required this.seekerEmail,
     required this.seekerName,
     required this.participants,
@@ -88,6 +90,7 @@ class Conversation {
       jobTitle: json['jobTitle'],
       posterId: json['posterId'] ?? '',
       posterName: json['posterName'] ?? '',
+      seekerId: json['seekerId'],
       seekerEmail: json['seekerEmail'] ?? '',
       seekerName: json['seekerName'] ?? '',
       participants: participants,
@@ -109,6 +112,7 @@ class Conversation {
       'jobTitle': jobTitle,
       'posterId': posterId,
       'posterName': posterName,
+      'seekerId': seekerId,
       'seekerEmail': seekerEmail,
       'seekerName': seekerName,
       'participants': participants,

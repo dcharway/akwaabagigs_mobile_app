@@ -256,6 +256,8 @@ class ApiService {
     String? idDocumentUrl,
     String? idDocumentType,
   }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+
     final application = ParseObject(Back4AppConfig.applicationClass)
       ..set('jobId', jobId)
       ..set('fullName', fullName)
@@ -264,6 +266,10 @@ class ApiService {
       ..set('coverLetter', coverLetter ?? '')
       ..set('status', 'pending_verification')
       ..set('applicationDate', DateTime.now().toIso8601String());
+
+    if (user?.objectId != null) {
+      application.set('userId', user!.objectId);
+    }
 
     if (position != null) application.set('position', position);
     if (location != null) application.set('location', location);
@@ -371,54 +377,38 @@ class ApiService {
 
   static Future<Conversation> createConversation({
     required String jobId,
+    required String participantAId,
+    required String participantBId,
     required String posterId,
     required String posterName,
+    String? seekerId,
     String? seekerEmail,
     String? seekerName,
   }) async {
     final user = await ParseUser.currentUser() as ParseUser?;
     if (user == null) throw Exception('Not authenticated');
 
-    final resolvedSeekerEmail = seekerEmail ?? user.emailAddress ?? '';
-    final resolvedSeekerName =
-        seekerName ?? user.get<String>('firstName') ?? '';
-
-    // Determine participantA (poster) and participantB (seeker)
-    // Both should be user objectIds for consistent querying
-    final participantA = posterId;
-    // Try to resolve seeker's userId from their email
-    String participantB = user.objectId ?? resolvedSeekerEmail;
-    if (seekerEmail != null && seekerEmail != user.emailAddress) {
-      // The caller is the poster — resolve seeker's userId from email
-      try {
-        final seekerUserQuery = QueryBuilder<ParseUser>(ParseUser.forQuery())
-          ..whereEqualTo('email', resolvedSeekerEmail);
-        final seekerUserResponse = await seekerUserQuery.query();
-        if (seekerUserResponse.success &&
-            seekerUserResponse.results != null &&
-            seekerUserResponse.results!.isNotEmpty) {
-          participantB =
-              (seekerUserResponse.results!.first as ParseUser).objectId ??
-                  resolvedSeekerEmail;
-        }
-      } catch (_) {
-        // Fall back to email if user lookup fails
-        participantB = resolvedSeekerEmail;
-      }
+    if (participantAId.isEmpty || participantBId.isEmpty) {
+      throw Exception(
+          'Both participantAId and participantBId are required');
     }
 
-    // Build participants list (many-to-many array of user IDs)
-    final participantsList = <String>{participantA, participantB}
-        .where((p) => p.isNotEmpty)
+    // Resolve Firestore document references for both participants
+    final participantARef = ParseObject('_User')..objectId = participantAId;
+    final participantBRef = ParseObject('_User')..objectId = participantBId;
+
+    // Build participants list from explicit IDs (deterministic, no inference)
+    final participantsList = <String>{participantAId, participantBId}
         .toList();
 
-    // Build participant names map
+    // Build participant names map from explicit arguments
     final participantNamesMap = <String, String>{};
-    if (participantA.isNotEmpty && posterName.isNotEmpty) {
-      participantNamesMap[participantA] = posterName;
+    if (posterName.isNotEmpty) {
+      participantNamesMap[posterId] = posterName;
     }
-    if (participantB.isNotEmpty && resolvedSeekerName.isNotEmpty) {
-      participantNamesMap[participantB] = resolvedSeekerName;
+    final resolvedSeekerId = seekerId ?? participantBId;
+    if (seekerName != null && seekerName.isNotEmpty) {
+      participantNamesMap[resolvedSeekerId] = seekerName;
     }
 
     // Check for existing conversation with same participants + job
@@ -439,14 +429,18 @@ class ApiService {
       ..set('jobId', jobId)
       ..set('posterId', posterId)
       ..set('posterName', posterName)
-      ..set('seekerEmail', resolvedSeekerEmail)
-      ..set('seekerName', resolvedSeekerName)
-      // New: many-to-many participants array
+      ..set('seekerId', resolvedSeekerId)
+      ..set('seekerEmail', seekerEmail ?? '')
+      ..set('seekerName', seekerName ?? '')
+      // Many-to-many participants array (user objectIds)
       ..set('participants', participantsList)
       ..set('participantNames', participantNamesMap)
+      // Store document references for each participant
+      ..set('participantARef', participantARef.toPointer())
+      ..set('participantBRef', participantBRef.toPointer())
       // Legacy compat
-      ..set('participantA', participantA)
-      ..set('participantB', participantB)
+      ..set('participantA', participantAId)
+      ..set('participantB', participantBId)
       ..set('lastMessageAt', DateTime.now().toIso8601String())
       ..set('messageCount', 0);
 
@@ -1990,6 +1984,7 @@ class ApiService {
       'rejectionResolution': obj.get<String>('rejectionResolution'),
       'jobTitle': obj.get<String>('jobTitle'),
       'jobCompany': obj.get<String>('jobCompany'),
+      'userId': obj.get<String>('userId'),
       'bidAmountPesewas': obj.get<int>('bidAmountPesewas'),
       'bidStatus': obj.get<String>('bidStatus') ?? 'none',
     };
@@ -2002,6 +1997,7 @@ class ApiService {
       'jobTitle': obj.get<String>('jobTitle'),
       'posterId': obj.get<String>('posterId') ?? '',
       'posterName': obj.get<String>('posterName') ?? '',
+      'seekerId': obj.get<String>('seekerId'),
       'seekerEmail': obj.get<String>('seekerEmail') ?? '',
       'seekerName': obj.get<String>('seekerName') ?? '',
       'participants': obj.get<List>('participants')?.cast<String>() ?? [],

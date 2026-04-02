@@ -582,6 +582,9 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
           jobId: widget.job.id,
           jobTitle: widget.job.title,
           otherPartyName: app.fullName,
+          posterId: widget.job.posterId,
+          posterName: widget.job.postedBy,
+          otherPartyId: app.userId,
         ),
       ),
     );
