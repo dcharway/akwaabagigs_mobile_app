@@ -328,18 +328,12 @@ class ApiService {
     final user = await ParseUser.currentUser() as ParseUser?;
     if (user == null) throw Exception('Not authenticated');
 
-    // Primary: query by participants array (many-to-many)
+    // Query by participants array (many-to-many)
     final participantsQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('participants', user.objectId);
 
-    // Fallback: legacy participantA/participantB/posterId/seekerEmail
-    final legacyAQuery = QueryBuilder<ParseObject>(
-        ParseObject(Back4AppConfig.conversationClass))
-      ..whereEqualTo('participantA', user.objectId);
-    final legacyBQuery = QueryBuilder<ParseObject>(
-        ParseObject(Back4AppConfig.conversationClass))
-      ..whereEqualTo('participantB', user.objectId);
+    // Fallback: posterId/seekerEmail (string fields, not pointers)
     final posterQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('posterId', user.objectId);
@@ -349,7 +343,7 @@ class ApiService {
 
     final mainQuery = QueryBuilder.or(
         ParseObject(Back4AppConfig.conversationClass),
-        [participantsQuery, legacyAQuery, legacyBQuery, posterQuery, seekerQuery])
+        [participantsQuery, posterQuery, seekerQuery])
       ..orderByDescending('lastMessageAt');
 
     final response = await mainQuery.query();
@@ -441,12 +435,9 @@ class ApiService {
       ..set('posterName', posterName)
       ..set('seekerEmail', resolvedSeekerEmail)
       ..set('seekerName', resolvedSeekerName)
-      // New: many-to-many participants array
+      // New: many-to-many participants array (replaces legacy participantA/B)
       ..set('participants', participantsList)
       ..set('participantNames', participantNamesMap)
-      // Legacy compat
-      ..set('participantA', participantA)
-      ..set('participantB', participantB)
       ..set('lastMessageAt', DateTime.now().toIso8601String())
       ..set('messageCount', 0);
 
@@ -2008,8 +1999,6 @@ class ApiService {
       'participantNames': obj.get<Map>('participantNames') != null
           ? Map<String, String>.from(obj.get<Map>('participantNames')!)
           : <String, String>{},
-      'participantA': obj.get<String>('participantA') ?? '',
-      'participantB': obj.get<String>('participantB') ?? '',
       'lastMessageText': obj.get<String>('lastMessageText'),
       'lastMessageSenderId': obj.get<String>('lastMessageSenderId'),
       'lastMessageAt': obj.get<String>('lastMessageAt'),
