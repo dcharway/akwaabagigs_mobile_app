@@ -358,6 +358,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 jobId: chat.conversation.jobId ?? '',
                 jobTitle: chat.conversation.jobTitle ?? '',
                 otherPartyName: chat.otherPartyName,
+                conversationId: chat.conversation.id,
               ),
             ),
           ).then((_) => _loadChats());
