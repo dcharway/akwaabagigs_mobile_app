@@ -262,10 +262,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4CAF50).withOpacity(0.1),
+                    color: const Color(0x194CAF50),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: const Color(0xFF4CAF50).withOpacity(0.3)),
+                        color: const Color(0x4D4CAF50)),
                   ),
                   child: Row(
                     children: [
