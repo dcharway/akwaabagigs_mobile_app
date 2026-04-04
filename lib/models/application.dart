@@ -16,6 +16,8 @@ class Application {
   final String? rejectionResolution;
   final String? jobTitle;
   final String? jobCompany;
+  /// The objectId of the user who submitted this application.
+  final String? userId;
   // Bid fields
   final int? bidAmountPesewas;
   final String bidStatus; // none, pending, approved, rejected
@@ -38,6 +40,7 @@ class Application {
     this.rejectionResolution,
     this.jobTitle,
     this.jobCompany,
+    this.userId,
     this.bidAmountPesewas,
     this.bidStatus = 'none',
   });
@@ -77,6 +80,7 @@ class Application {
       rejectionResolution: json['rejectionResolution'],
       jobTitle: json['jobTitle'],
       jobCompany: json['jobCompany'],
+      userId: json['userId'],
       bidAmountPesewas: json['bidAmountPesewas'],
       bidStatus: json['bidStatus'] ?? 'none',
     );
