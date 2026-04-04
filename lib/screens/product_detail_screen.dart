@@ -206,7 +206,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: stock > 0
-                          ? const Color(0xFF4CAF50).withOpacity(0.1)
+                          ? const Color(0x194CAF50)
                           : AppColors.red50,
                       borderRadius: BorderRadius.circular(6),
                     ),
