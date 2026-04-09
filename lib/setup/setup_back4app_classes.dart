@@ -105,6 +105,7 @@ Future<void> main() async {
   // 3. Conversation class
   print('Creating Conversation class...');
   seedIds['Conversation'] = await createObject('Conversation', {
+    'type': 'one_to_one',
     'jobId': '_seed_',
     'jobTitle': '_seed_',
     'posterId': '_seed_',
