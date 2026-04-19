@@ -356,11 +356,9 @@ class ApiService {
 
     final mainQuery = QueryBuilder.or(
         ParseObject(Back4AppConfig.conversationClass),
-        [participantsQuery, legacyAQuery, legacyBQuery, posterQuery, seekerQuery])
+        [participantsQuery, posterQuery, seekerQuery])
       ..orderByDescending('lastMessageAt')
       ..setLimit(50);
-        [participantsQuery, posterQuery, seekerQuery])
-      ..orderByDescending('lastMessageAt');
 
     final response = await mainQuery.query();
     if (response.success && response.results != null) {
@@ -866,14 +864,21 @@ class ApiService {
 
   static Future<void> approveBid(String applicationId) async {
     // Fetch the application to read bid amount and jobId.
-    // fetch() in this SDK version returns the ParseObject directly
-    // (populated in place); it throws on failure.
-    final appObj = ParseObject(Back4AppConfig.applicationClass)
-      ..objectId = applicationId;
-    await appObj.fetch();
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.applicationClass))
+      ..whereEqualTo('objectId', applicationId)
+      ..setLimit(1);
+    final findResponse = await query.query();
 
-    final jobId = appObj.get<String>('jobId');
-    final bidAmount = appObj.get<int>('bidAmountPesewas');
+    String? jobId;
+    int? bidAmount;
+    if (findResponse.success &&
+        findResponse.results != null &&
+        findResponse.results!.isNotEmpty) {
+      final appObj = findResponse.results!.first as ParseObject;
+      jobId = appObj.get<String>('jobId');
+      bidAmount = appObj.get<int>('bidAmountPesewas');
+    }
 
     // Run the application + job updates in parallel.
     final appUpdate = ParseObject(Back4AppConfig.applicationClass)
