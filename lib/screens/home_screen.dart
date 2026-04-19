@@ -36,6 +36,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey<ChatListScreenState> _chatListKey =
+      GlobalKey<ChatListScreenState>();
 
   @override
   void initState() {
@@ -72,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildHomeLanding(),
           _buildGigsTab(),
           const StoreScreen(),
-          const ChatListScreen(),
+          ChatListScreen(key: _chatListKey),
           const NotificationsScreen(),
           const ProfileScreen(),
         ],
@@ -376,6 +378,11 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _currentIndex = index;
         });
+        // Chat tab (index 3): reload conversations so the list is fresh
+        // even though IndexedStack keeps the widget alive.
+        if (index == 3) {
+          _chatListKey.currentState?.reloadIfNeeded();
+        }
       },
       behavior: HitTestBehavior.opaque,
       child: SizedBox(

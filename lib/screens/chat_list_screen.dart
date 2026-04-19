@@ -6,6 +6,7 @@ import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../config/back4app_config.dart';
 import '../models/conversation.dart';
 import '../providers/auth_provider.dart';
+import '../providers/notifications_provider.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
 import 'live_chat_screen.dart';
@@ -15,28 +16,52 @@ class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
   @override
-  State<ChatListScreen> createState() => _ChatListScreenState();
+  State<ChatListScreen> createState() => ChatListScreenState();
 }
 
-class _ChatListScreenState extends State<ChatListScreen> {
+class ChatListScreenState extends State<ChatListScreen> {
   List<_ChatEntry> _chats = [];
   bool _isLoading = true;
   String? _error;
   LiveQuery? _liveQuery;
   Subscription? _messageSubscription;
+  Subscription? _conversationSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadChats();
     _subscribeLiveQuery();
+    // Register for conversation-change events from the global provider so
+    // that conversations created elsewhere (e.g. LiveChatScreen) trigger a
+    // reload even though this widget lives inside an IndexedStack.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final notif = context.read<NotificationsProvider>();
+      notif.onConversationChanged = _onConversationChanged;
+    });
   }
 
   @override
   void dispose() {
     _unsubscribeLiveQuery();
+    // Deregister callback to avoid calling setState on a disposed widget.
+    try {
+      final notif = context.read<NotificationsProvider>();
+      if (notif.onConversationChanged == _onConversationChanged) {
+        notif.onConversationChanged = null;
+      }
+    } catch (_) {}
     super.dispose();
   }
+
+  void _onConversationChanged() {
+    if (mounted) _loadChats();
+  }
+
+  /// Called by [HomeScreen] when the chat tab becomes visible so the
+  /// list is always up-to-date even though IndexedStack keeps the
+  /// widget alive.
+  void reloadIfNeeded() => _loadChats();
 
   /// Load conversations and fetch the last message for each.
   Future<void> _loadChats() async {
@@ -98,24 +123,39 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  /// LiveQuery on Message class to refresh chat list in real-time.
+  /// LiveQuery on Message + Conversation classes to refresh in real-time.
   Future<void> _subscribeLiveQuery() async {
     try {
       _liveQuery = LiveQuery();
-      final query = QueryBuilder<ParseObject>(
-          ParseObject(Back4AppConfig.messageClass));
-      _messageSubscription = await _liveQuery!.client.subscribe(query);
 
+      final msgQuery = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.messageClass));
+      _messageSubscription = await _liveQuery!.client.subscribe(msgQuery);
       _messageSubscription!.on(LiveQueryEvent.create, (_) {
-        // Reload list when any new message arrives
+        if (mounted) _loadChats();
+      });
+
+      final convQuery = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.conversationClass));
+      _conversationSubscription =
+          await _liveQuery!.client.subscribe(convQuery);
+      _conversationSubscription!.on(LiveQueryEvent.create, (_) {
+        if (mounted) _loadChats();
+      });
+      _conversationSubscription!.on(LiveQueryEvent.update, (_) {
         if (mounted) _loadChats();
       });
     } catch (_) {}
   }
 
   void _unsubscribeLiveQuery() {
-    if (_liveQuery != null && _messageSubscription != null) {
-      _liveQuery!.client.unSubscribe(_messageSubscription!);
+    if (_liveQuery != null) {
+      if (_messageSubscription != null) {
+        _liveQuery!.client.unSubscribe(_messageSubscription!);
+      }
+      if (_conversationSubscription != null) {
+        _liveQuery!.client.unSubscribe(_conversationSubscription!);
+      }
     }
   }
 

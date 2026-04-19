@@ -218,6 +218,8 @@ class NotificationsScreen extends StatelessWidget {
         return _NotifStyle(Icons.star, AppColors.amber500);
       case 'new_message':
         return _NotifStyle(Icons.chat_bubble, const Color(0xFF4CAF50));
+      case 'new_conversation':
+        return _NotifStyle(Icons.forum, AppColors.blue600);
       case 'alert':
         return _styleForSeverity(notif.severity);
       default:
