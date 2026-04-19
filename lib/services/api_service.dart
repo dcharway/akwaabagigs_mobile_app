@@ -1529,6 +1529,44 @@ class ApiService {
     };
   }
 
+  // ============ MEDIA ASSETS ============
+
+  static Future<List<Map<String, dynamic>>> getActiveMediaAssets() async {
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.mediaAssetClass))
+      ..whereEqualTo('isActive', true)
+      ..orderByDescending('createdAt');
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!
+          .map((e) => _parseObjectToMediaAssetMap(e as ParseObject))
+          .toList();
+    }
+    return [];
+  }
+
+  static Map<String, dynamic> _parseObjectToMediaAssetMap(ParseObject obj) {
+    String? fileUrl = obj.get<String>('fileUrl');
+
+    if ((fileUrl == null || fileUrl.isEmpty) && obj.get('file') != null) {
+      final parseFile = obj.get<ParseFile>('file');
+      fileUrl = parseFile?.url;
+    }
+
+    return {
+      'id': obj.objectId ?? '',
+      'title': obj.get<String>('title') ?? '',
+      'fileUrl': fileUrl ?? '',
+      'mediaType': obj.get<String>('mediaType') ?? 'image',
+      'mimeType': obj.get<String>('mimeType'),
+      'sizeBytes': obj.get<int>('sizeBytes'),
+      'isActive': obj.get<bool>('isActive') ?? true,
+      'uploader': obj.get<String>('uploader'),
+      'createdAt': obj.createdAt?.toIso8601String() ?? '',
+    };
+  }
+
   // ============ KYC (Smile ID) ============
 
   /// Save KYC job ID after selfie+ID capture, set status to pending

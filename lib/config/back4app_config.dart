@@ -21,4 +21,5 @@ class Back4AppConfig {
   static const String orderClass = 'StoreOrder';
   static const String videoAdClass = 'VideoAd';
   static const String inventoryClass = 'Inventory';
+  static const String mediaAssetClass = 'MediaAsset';
 }
