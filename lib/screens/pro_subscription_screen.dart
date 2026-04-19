@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 class ProSubscriptionScreen extends StatefulWidget {
@@ -99,9 +100,7 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
 
   Future<void> _purchase() async {
     if (_phoneController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your MoMo number')),
-      );
+      AppNotifier.warning(context, 'Please enter your MoMo number');
       return;
     }
 
@@ -119,23 +118,14 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${plan['name']} activated!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context, '${plan['name']} activated!');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }

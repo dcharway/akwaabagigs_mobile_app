@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../config/back4app_config.dart';
 
+/// Severity level for a notification. Drives icon/color in the feed.
+enum NotificationSeverity { info, success, warning, error }
+
 class AppNotification {
   final String type;
   final String title;
   final String message;
   final DateTime timestamp;
   final Map<String, dynamic>? data;
+  final NotificationSeverity severity;
   bool isRead;
 
   AppNotification({
@@ -17,6 +21,7 @@ class AppNotification {
     required this.message,
     DateTime? timestamp,
     this.data,
+    this.severity = NotificationSeverity.info,
     this.isRead = false,
   }) : timestamp = timestamp ?? DateTime.now();
 }
@@ -238,14 +243,56 @@ class NotificationsProvider extends ChangeNotifier {
     required String title,
     required String message,
     Map<String, dynamic>? data,
+    NotificationSeverity severity = NotificationSeverity.info,
   }) {
     _notifications.insert(
       0,
       AppNotification(
-          type: type, title: title, message: message, data: data),
+        type: type,
+        title: title,
+        message: message,
+        data: data,
+        severity: severity,
+      ),
     );
     notifyListeners();
   }
+
+  /// Public entry point used by forms/screens to push a transient
+  /// alert into the unified notification feed.
+  void push({
+    required String title,
+    required String message,
+    NotificationSeverity severity = NotificationSeverity.info,
+    String type = 'alert',
+    Map<String, dynamic>? data,
+  }) {
+    _addNotification(
+      type: type,
+      title: title,
+      message: message,
+      data: data,
+      severity: severity,
+    );
+  }
+
+  void pushInfo(String message, {String title = 'Info'}) =>
+      push(title: title, message: message, severity: NotificationSeverity.info);
+
+  void pushSuccess(String message, {String title = 'Success'}) => push(
+      title: title,
+      message: message,
+      severity: NotificationSeverity.success);
+
+  void pushWarning(String message, {String title = 'Warning'}) => push(
+      title: title,
+      message: message,
+      severity: NotificationSeverity.warning);
+
+  void pushError(String message, {String title = 'Error'}) => push(
+      title: title,
+      message: message,
+      severity: NotificationSeverity.error);
 
   void markAllRead() {
     for (final n in _notifications) {

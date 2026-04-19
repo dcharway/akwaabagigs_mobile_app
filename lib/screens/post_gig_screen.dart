@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import 'payment_screen.dart';
 
 class PostGigScreen extends StatefulWidget {
@@ -64,9 +65,7 @@ class _PostGigScreenState extends State<PostGigScreen> {
 
   Future<void> _pickImages() async {
     if (_selectedImages.length >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maximum 5 images allowed')),
-      );
+      AppNotifier.warning(context, 'Maximum 5 images allowed');
       return;
     }
 
@@ -135,31 +134,19 @@ class _PostGigScreenState extends State<PostGigScreen> {
 
         if (mounted) {
           if (paid == true) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Gig posted and payment completed!'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            AppNotifier.success(
+                context, 'Gig posted and payment completed!');
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    'Gig saved as draft. Complete payment to go live.'),
-              ),
-            );
+            AppNotifier.info(context,
+                'Gig saved as draft. Complete payment to go live.');
           }
           Navigator.pop(context, paid == true);
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) {

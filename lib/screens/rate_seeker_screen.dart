@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/job.dart';
 import '../models/application.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 
 class RateSeekerScreen extends StatefulWidget {
   final Job job;
@@ -51,9 +52,7 @@ class _RateSeekerScreenState extends State<RateSeekerScreen> {
 
   Future<void> _submitRating() async {
     if (_rating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a rating')),
-      );
+      AppNotifier.warning(context, 'Please select a rating');
       return;
     }
 
@@ -70,22 +69,13 @@ class _RateSeekerScreenState extends State<RateSeekerScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Rating submitted!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context, 'Rating submitted!');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 import 'kyc_verification_screen.dart';
 
@@ -35,23 +36,14 @@ class _VerificationScreenState extends State<VerificationScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Verification submitted! Complete ID scan for instant verification.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context,
+            'Verification submitted! Complete ID scan for instant verification.');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

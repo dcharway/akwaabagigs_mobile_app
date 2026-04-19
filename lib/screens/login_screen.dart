@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 import 'register_screen.dart';
 
@@ -42,12 +43,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) {
@@ -100,10 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     : () async {
                         final email = resetEmailController.text.trim();
                         if (email.isEmpty || !email.contains('@')) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Enter a valid email')),
-                          );
+                          AppNotifier.warning(context, 'Enter a valid email');
                           return;
                         }
                         setDialogState(() => isSending = true);
@@ -111,24 +105,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           await ApiService.requestPasswordReset(email);
                           if (ctx.mounted) Navigator.pop(ctx);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Password reset link sent! Check your email.'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
+                            AppNotifier.success(context,
+                                'Password reset link sent! Check your email.');
                           }
                         } catch (e) {
                           setDialogState(() => isSending = false);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(e
-                                    .toString()
-                                    .replaceAll('Exception: ', '')),
-                              ),
-                            );
+                            AppNotifier.error(context,
+                                e.toString().replaceAll('Exception: ', ''));
                           }
                         }
                       },

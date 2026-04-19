@@ -6,6 +6,7 @@ import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../config/back4app_config.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 /// Private, asynchronous real-time chat between gig seeker and gig poster.
@@ -158,9 +159,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load messages: $e')),
-        );
+        AppNotifier.error(context, 'Failed to load messages: $e');
       }
     }
     if (mounted) setState(() => _isLoading = false);

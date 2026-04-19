@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../models/job.dart';
 import '../models/application.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 import 'live_chat_screen.dart';
 import 'rate_seeker_screen.dart';
@@ -117,23 +118,14 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
       try {
         await ApiService.updateJobAskingAmount(widget.job.id, result);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  'Asking amount set to GH₵${(result / 100).round()}'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppNotifier.success(context,
+              'Asking amount set to GH₵${(result / 100).round()}');
           _loadApplications();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
+          AppNotifier.error(
+              context, e.toString().replaceAll('Exception: ', ''));
         }
       }
     }
@@ -165,22 +157,13 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
       try {
         await ApiService.approveBid(app.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Bid approved! Chat is now enabled.'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppNotifier.success(context, 'Bid approved! Chat is now enabled.');
           _loadApplications();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
+          AppNotifier.error(
+              context, e.toString().replaceAll('Exception: ', ''));
         }
       }
     }
@@ -190,19 +173,13 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
     try {
       await ApiService.rejectBid(app.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bid rejected.')),
-        );
+        AppNotifier.info(context, 'Bid rejected.');
         _loadApplications();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
