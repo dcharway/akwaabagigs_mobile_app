@@ -55,34 +55,28 @@ class Conversation {
   }
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
-    // Parse participants array — support both new array and legacy A/B fields
-    List<String> participants;
-    if (json['participants'] is List) {
-      participants = List<String>.from(json['participants']);
-    } else {
-      // Build from legacy fields
-      final a = json['participantA'] ?? json['posterId'] ?? '';
-      final b = json['participantB'] ?? json['seekerEmail'] ?? '';
-      participants = [if (a.isNotEmpty) a, if (b.isNotEmpty) b];
-    }
+    final rawParticipants = json['participants'];
+    final List<String> participants = rawParticipants is List
+        ? rawParticipants.cast<String>()
+        : [
+            for (final v in [
+              json['participantA'] ?? json['posterId'] ?? '',
+              json['participantB'] ?? json['seekerEmail'] ?? '',
+            ])
+              if ((v as String).isNotEmpty) v,
+          ];
 
-    // Parse participant names map
-    Map<String, String> participantNames;
-    if (json['participantNames'] is Map) {
-      participantNames = Map<String, String>.from(json['participantNames']);
-    } else {
-      participantNames = {};
-      final posterId = json['posterId'] ?? '';
-      final posterName = json['posterName'] ?? '';
-      final seekerEmail = json['seekerEmail'] ?? '';
-      final seekerName = json['seekerName'] ?? '';
-      if (posterId.isNotEmpty && posterName.isNotEmpty) {
-        participantNames[posterId] = posterName;
-      }
-      if (seekerEmail.isNotEmpty && seekerName.isNotEmpty) {
-        participantNames[seekerEmail] = seekerName;
-      }
-    }
+    final rawNames = json['participantNames'];
+    final Map<String, String> participantNames = rawNames is Map
+        ? Map<String, String>.from(rawNames)
+        : {
+            if ((json['posterId'] ?? '').isNotEmpty &&
+                (json['posterName'] ?? '').isNotEmpty)
+              json['posterId'] as String: json['posterName'] as String,
+            if ((json['seekerEmail'] ?? '').isNotEmpty &&
+                (json['seekerName'] ?? '').isNotEmpty)
+              json['seekerEmail'] as String: json['seekerName'] as String,
+          };
 
     return Conversation(
       id: json['id'] ?? '',

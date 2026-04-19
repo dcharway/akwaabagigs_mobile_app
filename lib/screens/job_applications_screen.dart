@@ -39,10 +39,12 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
     });
 
     try {
-      _applications =
-          await ApiService.getApplications(jobId: widget.job.id);
-      // Refresh job data for current offerAmount
-      final refreshedJob = await ApiService.getJob(widget.job.id);
+      final results = await Future.wait([
+        ApiService.getApplications(jobId: widget.job.id),
+        ApiService.getJob(widget.job.id),
+      ]);
+      _applications = results[0] as List<Application>;
+      final refreshedJob = results[1] as Job?;
       if (refreshedJob != null) _currentJob = refreshedJob;
     } catch (e) {
       _error = e.toString().replaceAll('Exception: ', '');
