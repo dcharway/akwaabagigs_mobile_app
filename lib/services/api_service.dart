@@ -876,25 +876,23 @@ class ApiService {
   }
 
   static Future<void> approveBid(String applicationId) async {
-    // Fetch the application to read bid amount and jobId
+    // Fetch the application to read bid amount and jobId.
+    // fetch() in this SDK version returns the ParseObject directly
+    // (populated in place); it throws on failure.
     final appObj = ParseObject(Back4AppConfig.applicationClass)
       ..objectId = applicationId;
-    final fetchResponse = await appObj.fetch();
-    if (!fetchResponse.success) {
-      throw Exception('Failed to fetch application');
-    }
-    final fetched = fetchResponse.result as ParseObject;
+    await appObj.fetch();
 
-    final jobId = fetched.get<String>('jobId');
-    final bidAmount = fetched.get<int>('bidAmountPesewas');
+    final jobId = appObj.get<String>('jobId');
+    final bidAmount = appObj.get<int>('bidAmountPesewas');
 
-    // Prepare both saves and run them in parallel
-    final app = ParseObject(Back4AppConfig.applicationClass)
+    // Run the application + job updates in parallel.
+    final appUpdate = ParseObject(Back4AppConfig.applicationClass)
       ..objectId = applicationId
       ..set('bidStatus', 'approved')
       ..set('status', 'approved');
 
-    final saves = <Future>[app.save()];
+    final saves = <Future<ParseResponse>>[appUpdate.save()];
 
     if (jobId != null) {
       final job = ParseObject(Back4AppConfig.jobClass)
@@ -908,7 +906,7 @@ class ApiService {
     }
 
     final results = await Future.wait(saves);
-    if (!(results[0] as ParseResponse).success) {
+    if (!results[0].success) {
       throw Exception('Failed to approve bid');
     }
   }
