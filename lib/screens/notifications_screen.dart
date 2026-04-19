@@ -28,7 +28,7 @@ class NotificationsScreen extends StatelessWidget {
                           fontSize: 18, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   const Text(
-                    "You'll be notified about gig updates, bids, messages, and more",
+                    "You'll be notified about gig updates, bids, and chat messages.",
                     style: TextStyle(
                         color: AppColors.gray500, fontSize: 13),
                     textAlign: TextAlign.center,
@@ -192,6 +192,7 @@ class NotificationsScreen extends StatelessWidget {
 
   _NotifStyle _getNotifStyle(AppNotification notif) {
     switch (notif.type) {
+      // ---- Gig category ----
       case 'welcome':
         return _NotifStyle(Icons.celebration, AppColors.amber600);
       case 'tip_seeker':
@@ -214,29 +215,13 @@ class NotificationsScreen extends StatelessWidget {
         return _NotifStyle(Icons.handshake, const Color(0xFF4CAF50));
       case 'bid_rejected':
         return _NotifStyle(Icons.cancel, AppColors.red600);
-      case 'new_rating':
-        return _NotifStyle(Icons.star, AppColors.amber500);
+      // ---- Chat category ----
       case 'new_message':
         return _NotifStyle(Icons.chat_bubble, const Color(0xFF4CAF50));
       case 'new_conversation':
         return _NotifStyle(Icons.forum, AppColors.blue600);
-      case 'alert':
-        return _styleForSeverity(notif.severity);
       default:
         return _NotifStyle(Icons.notifications, AppColors.gray600);
-    }
-  }
-
-  _NotifStyle _styleForSeverity(NotificationSeverity severity) {
-    switch (severity) {
-      case NotificationSeverity.success:
-        return _NotifStyle(Icons.check_circle, const Color(0xFF4CAF50));
-      case NotificationSeverity.error:
-        return _NotifStyle(Icons.error, AppColors.red600);
-      case NotificationSeverity.warning:
-        return _NotifStyle(Icons.warning_amber, AppColors.amber600);
-      case NotificationSeverity.info:
-        return _NotifStyle(Icons.info, AppColors.blue600);
     }
   }
 }

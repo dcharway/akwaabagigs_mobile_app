@@ -1,37 +1,36 @@
-import 'package:flutter/widgets.dart';
-import 'package:provider/provider.dart';
-import '../providers/notifications_provider.dart';
+import 'package:flutter/material.dart';
 
-/// Routes all transient form feedback into the unified notification feed
-/// backed by [NotificationsProvider]. Drop-in replacement for the
-/// `ScaffoldMessenger.showSnackBar` pattern previously used throughout
-/// the app.
+/// Lightweight transient feedback shown as a floating SnackBar.
+///
+/// This is the correct channel for form validation, success confirmations,
+/// and error messages — things the user needs to see once and then dismiss.
+/// Persistent gig and chat events go through [NotificationsProvider] instead.
 class AppNotifier {
-  static NotificationsProvider? _providerFor(BuildContext context) {
-    try {
-      return Provider.of<NotificationsProvider>(context, listen: false);
-    } catch (_) {
-      return null;
-    }
-  }
-
   static void info(BuildContext context, String message,
       {String title = 'Info'}) {
-    _providerFor(context)?.pushInfo(message, title: title);
+    _show(context, message, Colors.blueGrey);
   }
 
   static void success(BuildContext context, String message,
       {String title = 'Success'}) {
-    _providerFor(context)?.pushSuccess(message, title: title);
+    _show(context, message, Colors.green);
   }
 
   static void warning(BuildContext context, String message,
       {String title = 'Warning'}) {
-    _providerFor(context)?.pushWarning(message, title: title);
+    _show(context, message, Colors.orange);
   }
 
   static void error(BuildContext context, String message,
       {String title = 'Error'}) {
-    _providerFor(context)?.pushError(message, title: title);
+    _show(context, message, Colors.redAccent);
+  }
+
+  static void _show(BuildContext context, String message, Color bg) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: bg),
+    );
   }
 }
