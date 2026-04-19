@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/job.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 import 'job_details_screen.dart';
 import 'edit_gig_screen.dart';
@@ -116,22 +117,13 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
       try {
         await ApiService.deleteJob(job.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Gig deleted'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppNotifier.success(context, 'Gig deleted');
           _loadMyJobs();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
+          AppNotifier.error(
+              context, e.toString().replaceAll('Exception: ', ''));
         }
       }
     }
@@ -141,22 +133,14 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
     try {
       await ApiService.updateJob(job.id, {'status': newStatus});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gig marked as ${_statusLabel(newStatus)}'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(
+            context, 'Gig marked as ${_statusLabel(newStatus)}');
         _loadMyJobs();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }

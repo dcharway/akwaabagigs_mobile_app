@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/gig_seeker.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 class KycVerificationScreen extends StatefulWidget {
@@ -56,27 +57,20 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
       _cameraPermissionGranted = status.isGranted;
     });
     if (!status.isGranted && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Camera permission is required for ID verification')),
-      );
+      AppNotifier.warning(
+          context, 'Camera permission is required for ID verification');
     }
   }
 
   Future<void> _startVerification() async {
     if (_seeker == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('Please create a Gig Seeker profile first')),
-      );
+      AppNotifier.warning(
+          context, 'Please create a Gig Seeker profile first');
       return;
     }
 
     if (_selectedDocType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select your document type')),
-      );
+      AppNotifier.warning(context, 'Please select your document type');
       return;
     }
 
@@ -161,12 +155,8 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Verification failed: ${e.toString().replaceAll('Exception: ', '')}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(context,
+            'Verification failed: ${e.toString().replaceAll('Exception: ', '')}');
       }
       setState(() => _verificationStep = 'idle');
     } finally {

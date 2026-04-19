@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 class AdminPostProductScreen extends StatefulWidget {
@@ -57,9 +58,7 @@ class _AdminPostProductScreenState extends State<AdminPostProductScreen> {
         _isChecking = false;
       });
       if (!admin) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Admin access required')),
-        );
+        AppNotifier.warning(context, 'Admin access required');
         Navigator.pop(context);
       }
     }
@@ -106,22 +105,13 @@ class _AdminPostProductScreenState extends State<AdminPostProductScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Product posted!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context, 'Product posted!');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

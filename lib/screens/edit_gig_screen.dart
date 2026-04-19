@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/job.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 
 class EditGigScreen extends StatefulWidget {
   final Job job;
@@ -95,22 +96,13 @@ class _EditGigScreenState extends State<EditGigScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Gig updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context, 'Gig updated successfully!');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

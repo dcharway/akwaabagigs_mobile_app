@@ -116,7 +116,7 @@ class NotificationsScreen extends StatelessWidget {
         notif.timestamp.month == now.month &&
         notif.timestamp.year == now.year;
 
-    final style = _getNotifStyle(notif.type);
+    final style = _getNotifStyle(notif);
 
     return Container(
       decoration: BoxDecoration(
@@ -190,8 +190,8 @@ class NotificationsScreen extends StatelessWidget {
     );
   }
 
-  _NotifStyle _getNotifStyle(String type) {
-    switch (type) {
+  _NotifStyle _getNotifStyle(AppNotification notif) {
+    switch (notif.type) {
       case 'welcome':
         return _NotifStyle(Icons.celebration, AppColors.amber600);
       case 'tip_seeker':
@@ -218,8 +218,23 @@ class NotificationsScreen extends StatelessWidget {
         return _NotifStyle(Icons.star, AppColors.amber500);
       case 'new_message':
         return _NotifStyle(Icons.chat_bubble, const Color(0xFF4CAF50));
+      case 'alert':
+        return _styleForSeverity(notif.severity);
       default:
         return _NotifStyle(Icons.notifications, AppColors.gray600);
+    }
+  }
+
+  _NotifStyle _styleForSeverity(NotificationSeverity severity) {
+    switch (severity) {
+      case NotificationSeverity.success:
+        return _NotifStyle(Icons.check_circle, const Color(0xFF4CAF50));
+      case NotificationSeverity.error:
+        return _NotifStyle(Icons.error, AppColors.red600);
+      case NotificationSeverity.warning:
+        return _NotifStyle(Icons.warning_amber, AppColors.amber600);
+      case NotificationSeverity.info:
+        return _NotifStyle(Icons.info, AppColors.blue600);
     }
   }
 }

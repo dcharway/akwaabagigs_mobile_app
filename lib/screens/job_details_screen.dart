@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/job.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../widgets/async_chat_button.dart';
 import 'apply_screen.dart';
 import 'login_screen.dart';
@@ -40,12 +41,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     }
     if (mounted) {
       setState(() => _isSaved = !_isSaved);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_isSaved ? 'Gig saved' : 'Gig unsaved'),
-          duration: const Duration(seconds: 1),
-        ),
-      );
+      AppNotifier.info(context, _isSaved ? 'Gig saved' : 'Gig unsaved');
     }
   }
 

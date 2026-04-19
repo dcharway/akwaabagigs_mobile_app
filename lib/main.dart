@@ -155,13 +155,6 @@ class AkwaabaGigsApp extends StatelessWidget {
         backgroundColor: AppColors.amber600,
         foregroundColor: Colors.white,
       ),
-      snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.amber700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(

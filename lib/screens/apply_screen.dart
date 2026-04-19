@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/job.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 import 'bid_screen.dart';
 import 'pro_subscription_screen.dart';
@@ -331,12 +332,8 @@ class _ApplyScreenState extends State<ApplyScreen> {
       if (!canBid) {
         if (mounted) {
           setState(() => _isSubmitting = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'You have used all your bids this month. Purchase a Bid Pack to apply for more gigs.'),
-            ),
-          );
+          AppNotifier.warning(context,
+              'You have used all your bids this month. Purchase a Bid Pack to apply for more gigs.');
         }
         return;
       }
@@ -351,12 +348,8 @@ class _ApplyScreenState extends State<ApplyScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Application submitted! Now place your bid.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(
+            context, 'Application submitted! Now place your bid.');
 
         // Get the application ID for bidding
         final apps = await ApiService.getApplications(
@@ -384,12 +377,8 @@ class _ApplyScreenState extends State<ApplyScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) {

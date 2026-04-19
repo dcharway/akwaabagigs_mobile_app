@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/gig_poster.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 
 class EditPosterProfileScreen extends StatefulWidget {
   final GigPoster? profile;
@@ -121,23 +122,14 @@ class _EditPosterProfileScreenState extends State<EditPosterProfileScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                _isNew ? 'Poster profile created!' : 'Profile updated!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context,
+            _isNew ? 'Poster profile created!' : 'Profile updated!');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

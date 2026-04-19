@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/job.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 class EscrowScreen extends StatefulWidget {
@@ -36,22 +37,16 @@ class _EscrowScreenState extends State<EscrowScreen> {
   Future<void> _fundEscrow() async {
     final amountText = _amountController.text.trim();
     if (amountText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter an amount')),
-      );
+      AppNotifier.warning(context, 'Please enter an amount');
       return;
     }
     final amount = int.tryParse(amountText);
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid amount')),
-      );
+      AppNotifier.warning(context, 'Please enter a valid amount');
       return;
     }
     if (_phoneController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your MoMo number')),
-      );
+      AppNotifier.warning(context, 'Please enter your MoMo number');
       return;
     }
 
@@ -66,23 +61,15 @@ class _EscrowScreenState extends State<EscrowScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Escrow funded! Funds held securely.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(
+            context, 'Escrow funded! Funds held securely.');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
@@ -130,23 +117,14 @@ class _EscrowScreenState extends State<EscrowScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Funds released to worker!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context, 'Funds released to worker!');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }

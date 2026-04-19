@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/gig_seeker.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 
 class EditSeekerProfileScreen extends StatefulWidget {
   final GigSeeker? profile;
@@ -115,24 +116,14 @@ class _EditSeekerProfileScreenState extends State<EditSeekerProfileScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isNew
-                ? 'Seeker profile created!'
-                : 'Profile updated!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context,
+            _isNew ? 'Seeker profile created!' : 'Profile updated!');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

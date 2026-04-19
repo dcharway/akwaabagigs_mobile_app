@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/job.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 class BoostGigScreen extends StatefulWidget {
@@ -55,9 +56,7 @@ class _BoostGigScreenState extends State<BoostGigScreen> {
 
   Future<void> _purchase() async {
     if (_paymentMethod == 'mobile_money' && _phoneController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your MoMo number')),
-      );
+      AppNotifier.warning(context, 'Please enter your MoMo number');
       return;
     }
 
@@ -78,23 +77,14 @@ class _BoostGigScreenState extends State<BoostGigScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${boost['name']} activated!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppNotifier.success(context, '${boost['name']} activated!');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }

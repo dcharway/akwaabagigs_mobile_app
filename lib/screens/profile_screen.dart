@@ -4,6 +4,7 @@ import '../providers/auth_provider.dart';
 import '../models/gig_seeker.dart';
 import '../models/gig_poster.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 import 'edit_seeker_profile_screen.dart';
 import 'edit_poster_profile_screen.dart';
@@ -933,9 +934,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
@@ -1043,27 +1043,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     : () async {
                         if (currentPwController.text.isEmpty ||
                             newPwController.text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('All fields are required')),
-                          );
+                          AppNotifier.warning(
+                              context, 'All fields are required');
                           return;
                         }
                         if (newPwController.text.length < 6) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text(
-                                    'New password must be at least 6 characters')),
-                          );
+                          AppNotifier.warning(context,
+                              'New password must be at least 6 characters');
                           return;
                         }
                         if (newPwController.text !=
                             confirmPwController.text) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content:
-                                    Text('New passwords do not match')),
-                          );
+                          AppNotifier.warning(
+                              context, 'New passwords do not match');
                           return;
                         }
                         setDialogState(() => isChanging = true);
@@ -1074,24 +1066,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           );
                           if (ctx.mounted) Navigator.pop(ctx);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('Password changed successfully!'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
+                            AppNotifier.success(
+                                context, 'Password changed successfully!');
                           }
                         } catch (e) {
                           setDialogState(() => isChanging = false);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(e
-                                    .toString()
-                                    .replaceAll('Exception: ', '')),
-                              ),
-                            );
+                            AppNotifier.error(context,
+                                e.toString().replaceAll('Exception: ', ''));
                           }
                         }
                       },
@@ -1137,24 +1119,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           await ApiService.requestPasswordReset(email);
                           if (ctx.mounted) Navigator.pop(ctx);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Reset link sent! Check your email.'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
+                            AppNotifier.success(context,
+                                'Reset link sent! Check your email.');
                           }
                         } catch (e) {
                           setDialogState(() => isSending = false);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(e
-                                    .toString()
-                                    .replaceAll('Exception: ', '')),
-                              ),
-                            );
+                            AppNotifier.error(context,
+                                e.toString().replaceAll('Exception: ', ''));
                           }
                         }
                       },

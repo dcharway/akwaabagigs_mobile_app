@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 class AdminVideoAdsScreen extends StatefulWidget {
@@ -407,10 +408,8 @@ class _CreateVideoAdScreenState extends State<_CreateVideoAdScreen> {
 
     final videoUrl = _videoUrlController.text.trim();
     if (videoUrl.isEmpty && _videoFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please provide a video URL or upload a video')),
-      );
+      AppNotifier.warning(
+          context, 'Please provide a video URL or upload a video');
       return;
     }
 
@@ -455,20 +454,13 @@ class _CreateVideoAdScreenState extends State<_CreateVideoAdScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Video ad created!'),
-              backgroundColor: Colors.green),
-        );
+        AppNotifier.success(context, 'Video ad created!');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text(e.toString().replaceAll('Exception: ', ''))),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -846,20 +838,13 @@ class _EditVideoAdScreenState extends State<_EditVideoAdScreen> {
         },
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Ad updated'),
-              backgroundColor: Colors.green),
-        );
+        AppNotifier.success(context, 'Ad updated');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text(e.toString().replaceAll('Exception: ', ''))),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

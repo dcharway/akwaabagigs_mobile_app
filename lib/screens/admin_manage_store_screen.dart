@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../config/back4app_config.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 class AdminManageStoreScreen extends StatefulWidget {
@@ -199,11 +200,8 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
       try {
         await ApiService.updateProductPrice(product['id'] as String, result);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Price updated to GH₵ ${(result / 100).toStringAsFixed(0)}'),
-              backgroundColor: Colors.green),
-          );
+          AppNotifier.success(context,
+              'Price updated to GH₵ ${(result / 100).toStringAsFixed(0)}');
           _loadData();
         }
       } catch (e) {
@@ -301,11 +299,8 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
           );
         }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Stock adjusted by ${result['adjustment']} (${result['reason']})'),
-              backgroundColor: Colors.green),
-          );
+          AppNotifier.success(context,
+              'Stock adjusted by ${result['adjustment']} (${result['reason']})');
           _loadData();
         }
       } catch (e) {
@@ -319,9 +314,8 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
     try {
       await ApiService.updateProduct(product['id'] as String, {'status': newStatus});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Product ${newStatus == 'active' ? 'activated' : 'deactivated'}'),
-              backgroundColor: Colors.green));
+        AppNotifier.success(context,
+            'Product ${newStatus == 'active' ? 'activated' : 'deactivated'}');
         _loadData();
       }
     } catch (e) { _showError(e); }
@@ -346,8 +340,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
       try {
         await ApiService.deleteProduct(product['id'] as String);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Product deleted'), backgroundColor: Colors.green));
+          AppNotifier.success(context, 'Product deleted');
           _loadData();
         }
       } catch (_) {}
@@ -517,9 +510,8 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
           reason: reason,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('+$result added to ${inv['productName']}'),
-                backgroundColor: Colors.green));
+          AppNotifier.success(
+              context, '+$result added to ${inv['productName']}');
           _loadData();
         }
       } catch (e) { _showError(e); }
@@ -574,9 +566,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
       }
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$created inventory records created'),
-            backgroundColor: Colors.green));
+      AppNotifier.success(context, '$created inventory records created');
       _loadData();
     }
   }
@@ -638,8 +628,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
 
   void _showError(Object e) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))));
+      AppNotifier.error(context, e.toString().replaceAll('Exception: ', ''));
     }
   }
 }

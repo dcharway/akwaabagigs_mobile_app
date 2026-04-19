@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/job.dart';
 import '../services/api_service.dart';
+import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
 
 class PaymentScreen extends StatefulWidget {
@@ -40,24 +41,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Future<void> _processPayment() async {
     if (_paymentMethod == 'mobile_money' &&
         _phoneController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your mobile money number')),
-      );
+      AppNotifier.warning(context, 'Please enter your mobile money number');
       return;
     }
     if (_paymentMethod == 'bank_transfer' &&
         _referenceController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please enter your bank transfer reference')),
-      );
+      AppNotifier.warning(
+          context, 'Please enter your bank transfer reference');
       return;
     }
     if (_paymentMethod == 'cash' &&
         _cashReceiptController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your cash receipt number')),
-      );
+      AppNotifier.warning(context, 'Please enter your cash receipt number');
       return;
     }
 
@@ -93,12 +88,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        AppNotifier.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
