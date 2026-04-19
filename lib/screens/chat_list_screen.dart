@@ -199,41 +199,174 @@ class ChatListScreenState extends State<ChatListScreen> {
       );
     }
 
-    if (_chats.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.chat_bubble_outline,
-                  size: 64, color: AppColors.gray400),
-              const SizedBox(height: 16),
-              const Text('No conversations yet',
-                  style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              const Text(
-                'Apply for a gig and place a bid.\nChat unlocks when the poster accepts.',
-                style: TextStyle(color: AppColors.gray500, fontSize: 13),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return RefreshIndicator(
       color: AppColors.amber600,
       onRefresh: _loadChats,
-      child: ListView.builder(
-        itemCount: _chats.length,
-        itemBuilder: (context, index) {
-          return _buildChatTile(_chats[index]);
+      child: Consumer<NotificationsProvider>(
+        builder: (context, notifs, _) {
+          return CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              if (notifs.notifications.isNotEmpty) ...[
+                _buildSectionHeader(
+                  'Notifications',
+                  trailing: notifs.unreadCount > 0
+                      ? TextButton(
+                          onPressed: notifs.markAllRead,
+                          child: const Text('Mark all read',
+                              style: TextStyle(fontSize: 12)),
+                        )
+                      : null,
+                ),
+                SliverList.builder(
+                  itemCount: notifs.notifications.length,
+                  itemBuilder: (context, i) =>
+                      _buildNotificationTile(notifs, i),
+                ),
+              ],
+              _buildSectionHeader('Conversations'),
+              if (_chats.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.chat_bubble_outline,
+                            size: 48, color: AppColors.gray400),
+                        SizedBox(height: 12),
+                        Text(
+                          'No conversations yet',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          'Apply for a gig and place a bid.\n'
+                          'Chat unlocks when the poster accepts.',
+                          style: TextStyle(
+                              color: AppColors.gray500, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                SliverList.builder(
+                  itemCount: _chats.length,
+                  itemBuilder: (context, i) => _buildChatTile(_chats[i]),
+                ),
+            ],
+          );
         },
       ),
     );
+  }
+
+  Widget _buildSectionHeader(String title, {Widget? trailing}) {
+    return SliverToBoxAdapter(
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: const BoxDecoration(
+          color: AppColors.gray100,
+          border:
+              Border(bottom: BorderSide(color: AppColors.gray200)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.gray700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            if (trailing != null) trailing,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationTile(
+      NotificationsProvider provider, int index) {
+    final notif = provider.notifications[index];
+    final isToday = notif.timestamp.day == DateTime.now().day &&
+        notif.timestamp.month == DateTime.now().month &&
+        notif.timestamp.year == DateTime.now().year;
+    final timeLabel = isToday
+        ? _timeFormat.format(notif.timestamp)
+        : _dateFormat.format(notif.timestamp);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: notif.isRead ? Colors.white : AppColors.amber50,
+        border: const Border(
+            bottom: BorderSide(color: AppColors.gray200, width: 0.5)),
+      ),
+      child: ListTile(
+        dense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        leading: Icon(
+          _iconForType(notif.type),
+          color: AppColors.amber600,
+          size: 22,
+        ),
+        title: Text(
+          notif.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight:
+                notif.isRead ? FontWeight.w500 : FontWeight.bold,
+          ),
+        ),
+        subtitle: Text(
+          notif.message,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 11, color: AppColors.gray600),
+        ),
+        trailing: Text(
+          timeLabel,
+          style: const TextStyle(fontSize: 10, color: AppColors.gray500),
+        ),
+        onTap: () => provider.markRead(index),
+      ),
+    );
+  }
+
+  IconData _iconForType(String type) {
+    switch (type) {
+      case 'new_message':
+      case 'new_conversation':
+        return Icons.chat_bubble_outline;
+      case 'job_update':
+      case 'job_completed':
+        return Icons.work_outline;
+      case 'bid_agreed':
+      case 'bid_approved':
+        return Icons.handshake_outlined;
+      case 'bid_rejected':
+        return Icons.cancel_outlined;
+      case 'new_application':
+        return Icons.person_add_outlined;
+      case 'application_update':
+      case 'application_approved':
+        return Icons.assignment_outlined;
+      default:
+        return Icons.notifications_outlined;
+    }
   }
 
   Widget _buildSignInPrompt(BuildContext context) {

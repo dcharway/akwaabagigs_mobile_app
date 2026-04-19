@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/colors.dart';
 import '../providers/auth_provider.dart';
-import '../providers/notifications_provider.dart';
 import '../screens/chat_list_screen.dart';
-import '../screens/notifications_screen.dart';
 import '../screens/login_screen.dart';
 
 class HeaderWidget extends StatelessWidget {
@@ -16,63 +14,69 @@ class HeaderWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final notifProvider = context.watch<NotificationsProvider>();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              // Menu Button
-              GestureDetector(
-                onTap: onMenuTap,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.amber500, AppColors.amber700],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.amber600.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(Icons.menu, color: Colors.white, size: 20),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Logo and Title
-              Row(
-                children: [
-                  Container(
+          // ---- Left: menu + logo + title ----
+          // Wrapped in Expanded so a long user name does not push the
+          // right-side action button off-screen.
+          Expanded(
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: onMenuTap,
+                  child: Container(
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.amber500, width: 2),
-                    ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/icon/app_icon.png',
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.cover,
+                      gradient: const LinearGradient(
+                        colors: [AppColors.amber500, AppColors.amber700],
                       ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.amber600.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.menu,
+                        color: Colors.white, size: 20),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border:
+                        Border.all(color: AppColors.amber500, width: 2),
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/icon/app_icon.png',
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Column(
+                ),
+                const SizedBox(width: 8),
+                // The text column must flex so long names truncate instead
+                // of overflowing the outer Row.
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
                         'Akwaaba',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 20,
                           color: AppColors.amber900,
@@ -83,6 +87,8 @@ class HeaderWidget extends StatelessWidget {
                         authProvider.isAuthenticated
                             ? 'Welcome, ${authProvider.user?.firstName ?? 'User'}'
                             : 'Your Service Hub',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.gray600,
@@ -90,102 +96,45 @@ class HeaderWidget extends StatelessWidget {
                       ),
                     ],
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-          // Chat + Notification buttons
-          Row(
-            children: [
-              // Chat Button
-              GestureDetector(
-                onTap: () {
-                  if (onChatTap != null) {
-                    onChatTap!();
-                  } else if (!authProvider.isAuthenticated) {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()));
-                  } else {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const ChatListScreen()));
-                  }
-                },
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.gray100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.chat_bubble_outline,
-                    color: AppColors.gray700,
-                    size: 20,
-                  ),
-                ),
+          const SizedBox(width: 8),
+          // ---- Right: single Chat action ----
+          // The Alerts icon has been removed: chat is now the single
+          // destination for both conversations and notifications.
+          GestureDetector(
+            onTap: () {
+              if (onChatTap != null) {
+                onChatTap!();
+              } else if (!authProvider.isAuthenticated) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const LoginScreen()),
+                );
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ChatListScreen()),
+                );
+              }
+            },
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.gray100,
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(width: 8),
-              // Notification Button
-              GestureDetector(
-                onTap: () {
-                  if (!authProvider.isAuthenticated) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    );
-                    return;
-                  }
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const NotificationsScreen()),
-                  );
-                },
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.gray100,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.notifications_outlined,
-                        color: AppColors.gray700,
-                        size: 20,
-                      ),
-                    ),
-                    if (notifProvider.unreadCount > 0)
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            color: AppColors.red500,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${notifProvider.unreadCount}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+              child: const Icon(
+                Icons.chat_bubble_outline,
+                color: AppColors.gray700,
+                size: 20,
               ),
-            ],
+            ),
           ),
         ],
       ),

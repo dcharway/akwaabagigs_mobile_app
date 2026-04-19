@@ -15,7 +15,6 @@ import '../widgets/services_grid_widget.dart';
 import 'job_details_screen.dart';
 import 'chat_list_screen.dart';
 import 'profile_screen.dart';
-import 'notifications_screen.dart';
 import 'post_gig_screen.dart';
 import 'my_gigs_screen.dart';
 import 'my_applications_screen.dart';
@@ -74,8 +73,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildHomeLanding(),
           _buildGigsTab(),
           const StoreScreen(),
+          // Chat tab now also hosts notifications (Alerts has been
+          // folded in). See ChatListScreen for the merged UI.
           ChatListScreen(key: _chatListKey),
-          const NotificationsScreen(),
           const ProfileScreen(),
         ],
       ),
@@ -344,19 +344,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 activeIcon: Icons.chat_bubble,
                 label: 'Chat',
                 index: 3,
-              ),
-              _buildNavItem(
-                icon: Icons.notifications_outlined,
-                activeIcon: Icons.notifications,
-                label: 'Alerts',
-                index: 4,
+                // Chat tab now surfaces both conversations and the
+                // notification feed, so the unread badge aggregates here.
                 badgeCount: notifProvider.unreadCount,
               ),
               _buildNavItem(
                 icon: Icons.person_outline,
                 activeIcon: Icons.person,
                 label: 'Profile',
-                index: 5,
+                index: 4,
               ),
             ],
           ),
