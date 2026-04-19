@@ -19,6 +19,8 @@ class MyGigsScreen extends StatefulWidget {
 }
 
 class _MyGigsScreenState extends State<MyGigsScreen> {
+  static final _dateFormat = DateFormat('MMM d, yyyy');
+
   List<Job> _jobs = [];
   bool _isLoading = true;
   String? _error;
@@ -210,7 +212,7 @@ class _MyGigsScreenState extends State<MyGigsScreen> {
   }
 
   Widget _buildJobTile(Job job) {
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = _dateFormat;
     final statusColor = _statusColor(job.status);
 
     return Card(

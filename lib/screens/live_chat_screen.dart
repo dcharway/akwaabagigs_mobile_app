@@ -46,6 +46,9 @@ class LiveChatScreen extends StatefulWidget {
 
 class _LiveChatScreenState extends State<LiveChatScreen>
     with WidgetsBindingObserver {
+  static final _timeFormat = DateFormat('h:mm a');
+  static final _dateSeparatorFormat = DateFormat('MMM d, yyyy');
+
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _inputFocusNode = FocusNode();
@@ -701,7 +704,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
     } else if (msgDate == yesterday) {
       label = 'Yesterday';
     } else {
-      label = DateFormat('MMM d, yyyy').format(date);
+      label = _dateSeparatorFormat.format(date);
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -725,7 +728,7 @@ class _LiveChatScreenState extends State<LiveChatScreen>
   // ============ MESSAGE BUBBLE ============
 
   Widget _buildBubble(ParseObject msg, bool isMe) {
-    final timeFormat = DateFormat('h:mm a');
+    final timeFormat = _timeFormat;
     final content = msg.get<String>('content') ?? '';
     final senderName = msg.get<String>('senderName') ?? '';
     final createdAt = msg.createdAt ?? DateTime.now();

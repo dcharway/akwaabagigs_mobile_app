@@ -14,6 +14,8 @@ class AdminVideoAdsScreen extends StatefulWidget {
 }
 
 class _AdminVideoAdsScreenState extends State<AdminVideoAdsScreen> {
+  static final _dateFormat = DateFormat('MMM d, yyyy');
+
   List<Map<String, dynamic>> _ads = [];
   bool _isLoading = true;
 
@@ -87,7 +89,7 @@ class _AdminVideoAdsScreenState extends State<AdminVideoAdsScreen> {
   Widget _buildAdCard(Map<String, dynamic> ad) {
     final priceGhs = (ad['pricePesewas'] as int) / 100;
     final isActive = ad['status'] == 'active';
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = _dateFormat;
     final start = DateTime.tryParse(ad['scheduleStart'] as String);
     final end = DateTime.tryParse(ad['scheduleEnd'] as String);
     final isLive = isActive &&
@@ -317,6 +319,8 @@ class _CreateVideoAdScreen extends StatefulWidget {
 }
 
 class _CreateVideoAdScreenState extends State<_CreateVideoAdScreen> {
+  static final _dateFormat = DateFormat('MMM d, yyyy');
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
@@ -469,7 +473,7 @@ class _CreateVideoAdScreenState extends State<_CreateVideoAdScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = _dateFormat;
 
     return Scaffold(
       appBar: AppBar(
@@ -789,6 +793,8 @@ class _EditVideoAdScreen extends StatefulWidget {
 }
 
 class _EditVideoAdScreenState extends State<_EditVideoAdScreen> {
+  static final _dateFormat = DateFormat('MMM d, yyyy');
+
   late TextEditingController _titleController;
   late TextEditingController _descController;
   late TextEditingController _priceController;
@@ -853,7 +859,7 @@ class _EditVideoAdScreenState extends State<_EditVideoAdScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = _dateFormat;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Video Ad'),

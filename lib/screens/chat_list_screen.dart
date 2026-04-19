@@ -20,12 +20,16 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class ChatListScreenState extends State<ChatListScreen> {
+  static final _timeFormat = DateFormat('h:mm a');
+  static final _dateFormat = DateFormat('MMM d');
+
   List<_ChatEntry> _chats = [];
   bool _isLoading = true;
   String? _error;
   LiveQuery? _liveQuery;
   Subscription? _messageSubscription;
   Subscription? _conversationSubscription;
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -43,8 +47,8 @@ class ChatListScreenState extends State<ChatListScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _unsubscribeLiveQuery();
-    // Deregister callback to avoid calling setState on a disposed widget.
     try {
       final notif = context.read<NotificationsProvider>();
       if (notif.onConversationChanged == _onConversationChanged) {
@@ -55,13 +59,17 @@ class ChatListScreenState extends State<ChatListScreen> {
   }
 
   void _onConversationChanged() {
-    if (mounted) _loadChats();
+    if (mounted) _debouncedLoad();
   }
 
-  /// Called by [HomeScreen] when the chat tab becomes visible so the
-  /// list is always up-to-date even though IndexedStack keeps the
-  /// widget alive.
   void reloadIfNeeded() => _loadChats();
+
+  void _debouncedLoad() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) _loadChats();
+    });
+  }
 
   /// Load conversations and fetch the last message for each.
   Future<void> _loadChats() async {
@@ -132,7 +140,7 @@ class ChatListScreenState extends State<ChatListScreen> {
           ParseObject(Back4AppConfig.messageClass));
       _messageSubscription = await _liveQuery!.client.subscribe(msgQuery);
       _messageSubscription!.on(LiveQueryEvent.create, (_) {
-        if (mounted) _loadChats();
+        if (mounted) _debouncedLoad();
       });
 
       final convQuery = QueryBuilder<ParseObject>(
@@ -140,10 +148,10 @@ class ChatListScreenState extends State<ChatListScreen> {
       _conversationSubscription =
           await _liveQuery!.client.subscribe(convQuery);
       _conversationSubscription!.on(LiveQueryEvent.create, (_) {
-        if (mounted) _loadChats();
+        if (mounted) _debouncedLoad();
       });
       _conversationSubscription!.on(LiveQueryEvent.update, (_) {
-        if (mounted) _loadChats();
+        if (mounted) _debouncedLoad();
       });
     } catch (_) {}
   }
@@ -265,8 +273,8 @@ class ChatListScreenState extends State<ChatListScreen> {
   }
 
   Widget _buildChatTile(_ChatEntry chat) {
-    final timeFormat = DateFormat('h:mm a');
-    final dateFormat = DateFormat('MMM d');
+    final timeFormat = _timeFormat;
+    final dateFormat = _dateFormat;
     final now = DateTime.now();
     final isToday = chat.lastMessageTime.day == now.day &&
         chat.lastMessageTime.month == now.month &&

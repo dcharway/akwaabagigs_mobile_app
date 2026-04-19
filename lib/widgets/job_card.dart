@@ -5,6 +5,8 @@ import '../models/job.dart';
 import '../utils/colors.dart';
 
 class JobCard extends StatelessWidget {
+  static final _dateFormat = DateFormat('MMM d');
+
   final Job job;
   final VoidCallback onTap;
 
@@ -16,7 +18,7 @@ class JobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('MMM d');
+    final dateFormat = _dateFormat;
 
     return GestureDetector(
       onTap: onTap,

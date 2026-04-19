@@ -38,9 +38,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      _seekerProfile = await ApiService.getGigSeekerProfile();
-      _posterProfile = await ApiService.getGigPosterProfile();
-      _bidInfo = await ApiService.getBidInfo();
+      final results = await Future.wait([
+        ApiService.getGigSeekerProfile(),
+        ApiService.getGigPosterProfile(),
+        ApiService.getBidInfo(),
+      ]);
+      _seekerProfile = results[0] as GigSeeker?;
+      _posterProfile = results[1] as GigPoster?;
+      _bidInfo = results[2] as Map<String, dynamic>?;
     } catch (e) {
       debugPrint('Error loading profiles: $e');
     }

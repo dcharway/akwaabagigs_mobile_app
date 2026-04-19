@@ -70,11 +70,13 @@ class Job {
       locationRange: json['locationRange'],
       salary: json['salary'] ?? '',
       employmentType: json['employmentType'] ?? '',
-      requirements: List<String>.from(json['requirements'] ?? []),
-      gigImages: List<String>.from(json['gigImages'] ?? []),
+      requirements: (json['requirements'] as List?)?.cast<String>() ?? const [],
+      gigImages: (json['gigImages'] as List?)?.cast<String>() ?? const [],
       postedBy: json['postedBy'] ?? '',
       posterId: json['posterId'] ?? '',
-      postedDate: DateTime.tryParse(json['postedDate'] ?? '') ?? DateTime.now(),
+      postedDate: json['postedDate'] != null
+          ? DateTime.tryParse(json['postedDate']) ?? DateTime.now()
+          : DateTime.now(),
       status: json['status'] ?? 'active',
       category: json['category'],
       isFeatured: json['isFeatured'] ?? false,

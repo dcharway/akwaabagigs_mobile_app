@@ -14,6 +14,10 @@ import '../models/rating.dart';
 class ApiService {
   static const String baseUrl = Back4AppConfig.serverUrl;
 
+  static String _fullName(ParseUser user) =>
+      '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'
+          .trim();
+
   // ============ AUTH ============
 
   static Future<Map<String, dynamic>> login({
@@ -132,7 +136,8 @@ class ApiService {
   static Future<List<Job>> getJobs() async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.jobClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     final response = await query.query();
     if (response.success && response.results != null) {
@@ -164,7 +169,8 @@ class ApiService {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.jobClass))
       ..whereEqualTo('posterId', user.objectId)
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     final response = await query.query();
     if (response.success && response.results != null) {
@@ -300,7 +306,8 @@ class ApiService {
   }) async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.applicationClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(200);
 
     if (email != null) query.whereEqualTo('email', email);
     if (jobId != null) query.whereEqualTo('jobId', jobId);
@@ -349,6 +356,9 @@ class ApiService {
 
     final mainQuery = QueryBuilder.or(
         ParseObject(Back4AppConfig.conversationClass),
+        [participantsQuery, legacyAQuery, legacyBQuery, posterQuery, seekerQuery])
+      ..orderByDescending('lastMessageAt')
+      ..setLimit(50);
         [participantsQuery, posterQuery, seekerQuery])
       ..orderByDescending('lastMessageAt');
 
@@ -459,7 +469,8 @@ class ApiService {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.messageClass))
       ..whereEqualTo('conversationId', conversationId)
-      ..orderByAscending('createdAt');
+      ..orderByAscending('createdAt')
+      ..setLimit(200);
 
     final response = await query.query();
     if (response.success && response.results != null) {
@@ -482,7 +493,7 @@ class ApiService {
       ..set('conversationId', conversationId)
       ..set('senderId', user.objectId)
       ..set('senderName',
-          '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'.trim())
+          _fullName(user))
       ..set('content', content)
       ..set('isRead', false);
 
@@ -494,7 +505,8 @@ class ApiService {
 
     final response = await message.save();
     if (response.success && response.result != null) {
-      // Update conversation: last message info + increment count
+      // Fire-and-forget: update conversation metadata without blocking
+      // the message return.
       final conversation = ParseObject(Back4AppConfig.conversationClass)
         ..objectId = conversationId
         ..set('lastMessageAt', DateTime.now().toIso8601String())
@@ -505,7 +517,7 @@ class ApiService {
         ..setPublicReadAccess(allowed: true)
         ..setPublicWriteAccess(allowed: true);
       conversation.setACL(convAcl);
-      await conversation.save();
+      conversation.save();
 
       return Message.fromJson(
           _parseObjectToMessageMap(response.result as ParseObject));
@@ -738,18 +750,16 @@ class ApiService {
   }
 
   static Future<List<String>> uploadGigImages(List<File> files) async {
-    final urls = <String>[];
-    for (final file in files) {
+    final futures = files.map((file) async {
       final fileName = file.path.split('/').last;
       final parseFile = ParseFile(file, name: fileName);
       final response = await parseFile.save();
       if (response.success && parseFile.url != null) {
-        urls.add(parseFile.url!);
-      } else {
-        throw Exception('Failed to upload image');
+        return parseFile.url!;
       }
-    }
-    return urls;
+      throw Exception('Failed to upload image');
+    });
+    return Future.wait(futures);
   }
 
   static Future<String> uploadProfilePicture(File file,
@@ -780,7 +790,7 @@ class ApiService {
       ..set('applicationId', applicationId)
       ..set('posterId', user.objectId)
       ..set('posterName',
-          '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'.trim())
+          _fullName(user))
       ..set('gigSeekerId', gigSeekerId)
       ..set('gigSeekerName', gigSeekerName)
       ..set('rating', rating);
@@ -799,7 +809,8 @@ class ApiService {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.ratingClass))
       ..whereEqualTo('gigSeekerId', email)
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     final response = await query.query();
     if (response.success) {
@@ -854,40 +865,40 @@ class ApiService {
   }
 
   static Future<void> approveBid(String applicationId) async {
-    // First get the application to read bid amount and jobId
-    final query = QueryBuilder<ParseObject>(
-        ParseObject(Back4AppConfig.applicationClass))
-      ..whereEqualTo('objectId', applicationId);
-    final findResponse = await query.query();
+    // Fetch the application to read bid amount and jobId
+    final appObj = ParseObject(Back4AppConfig.applicationClass)
+      ..objectId = applicationId;
+    final fetchResponse = await appObj.fetch();
+    if (!fetchResponse.success) {
+      throw Exception('Failed to fetch application');
+    }
+    final fetched = fetchResponse.result as ParseObject;
 
+    final jobId = fetched.get<String>('jobId');
+    final bidAmount = fetched.get<int>('bidAmountPesewas');
+
+    // Prepare both saves and run them in parallel
     final app = ParseObject(Back4AppConfig.applicationClass)
       ..objectId = applicationId
       ..set('bidStatus', 'approved')
       ..set('status', 'approved');
 
-    final response = await app.save();
-    if (!response.success) {
-      throw Exception('Failed to approve bid: ${response.error?.message}');
+    final saves = <Future>[app.save()];
+
+    if (jobId != null) {
+      final job = ParseObject(Back4AppConfig.jobClass)
+        ..objectId = jobId
+        ..set('chatEnabled', true)
+        ..set('status', 'bid_agreed');
+      if (bidAmount != null) {
+        job.set('agreedAmountPesewas', bidAmount);
+      }
+      saves.add(job.save());
     }
 
-    // Enable chat on the Job and record agreed amount
-    if (findResponse.success &&
-        findResponse.results != null &&
-        findResponse.results!.isNotEmpty) {
-      final appObj = findResponse.results!.first as ParseObject;
-      final jobId = appObj.get<String>('jobId');
-      final bidAmount = appObj.get<int>('bidAmountPesewas');
-
-      if (jobId != null) {
-        final job = ParseObject(Back4AppConfig.jobClass)
-          ..objectId = jobId
-          ..set('chatEnabled', true)
-          ..set('status', 'bid_agreed');
-        if (bidAmount != null) {
-          job.set('agreedAmountPesewas', bidAmount);
-        }
-        await job.save();
-      }
+    final results = await Future.wait(saves);
+    if (!(results[0] as ParseResponse).success) {
+      throw Exception('Failed to approve bid');
     }
   }
 
@@ -944,8 +955,8 @@ class ApiService {
       throw Exception('Failed to boost gig: ${response.error?.message}');
     }
 
-    // Record the boost payment
-    await recordPayment(
+    // Fire-and-forget: record the boost payment without blocking return
+    recordPayment(
       jobId: jobId,
       amount: cost,
       currency: 'GHS',
@@ -1232,7 +1243,8 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getInventory() async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.inventoryClass))
-      ..orderByAscending('productName');
+      ..orderByAscending('productName')
+      ..setLimit(500);
 
     final response = await query.query();
     if (response.success && response.results != null) {
@@ -1404,7 +1416,8 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getAllVideoAds() async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.videoAdClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(50);
     final response = await query.query();
     if (response.success && response.results != null) {
       return response.results!
@@ -1626,7 +1639,8 @@ class ApiService {
   }) async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.productClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     if (activeOnly) {
       query.whereEqualTo('status', 'active');
@@ -1682,7 +1696,7 @@ class ApiService {
       ..set('status', 'active')
       ..set('sellerId', user.objectId)
       ..set('sellerName',
-          '${user.get<String>('firstName') ?? ''} ${user.get<String>('lastName') ?? ''}'.trim());
+          _fullName(user));
 
     if (imageUrls != null && imageUrls.isNotEmpty) {
       product.set('images', imageUrls);
@@ -1773,22 +1787,23 @@ class ApiService {
           'Failed to create order: ${response.error?.message}');
     }
 
-    // Decrement stock
+    // Decrement stock and record payment in parallel
     final product = ParseObject(Back4AppConfig.productClass)
       ..objectId = productId;
     product.setDecrement('stock', quantity);
-    await product.save();
 
-    // Record payment
-    await recordPayment(
-      jobId: 'store_$productId',
-      amount: (totalPesewas / 100).round(),
-      currency: 'GHS',
-      paymentMethod: paymentMethod,
-      paymentTier: 'store_purchase',
-      duration: 'one-time',
-      phone: buyerPhone,
-    );
+    await Future.wait([
+      product.save(),
+      recordPayment(
+        jobId: 'store_$productId',
+        amount: (totalPesewas / 100).round(),
+        currency: 'GHS',
+        paymentMethod: paymentMethod,
+        paymentTier: 'store_purchase',
+        duration: 'one-time',
+        phone: buyerPhone,
+      ),
+    ]);
 
     return {
       'orderId': response.result?.objectId ?? '',
@@ -1805,7 +1820,8 @@ class ApiService {
 
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.orderClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     if (!adminView) {
       query.whereEqualTo('buyerId', user.objectId);
