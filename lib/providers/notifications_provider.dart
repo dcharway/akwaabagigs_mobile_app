@@ -36,6 +36,11 @@ class NotificationsProvider extends ChangeNotifier {
   Subscription? _applicationSubscription;
   Subscription? _ratingSubscription;
   Subscription? _messageSubscription;
+  Subscription? _conversationSubscription;
+
+  /// Callback invoked when a conversation is created or updated via
+  /// LiveQuery.  ChatListScreen registers itself here so it can reload.
+  VoidCallback? onConversationChanged;
 
   List<AppNotification> get notifications => _notifications;
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
@@ -187,6 +192,27 @@ class NotificationsProvider extends ChangeNotifier {
         );
       });
 
+      // ---- Conversation updates (new conversation created or updated) ----
+      final convQuery = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.conversationClass));
+      _conversationSubscription =
+          await _liveQuery!.client.subscribe(convQuery);
+
+      _conversationSubscription!.on(LiveQueryEvent.create, (value) {
+        final jobTitle = value.get<String>('jobTitle') ?? 'a gig';
+        _addNotification(
+          type: 'new_conversation',
+          title: 'New Conversation',
+          message: 'A conversation was started for "$jobTitle".',
+          data: {'conversationId': value.objectId},
+        );
+        onConversationChanged?.call();
+      });
+
+      _conversationSubscription!.on(LiveQueryEvent.update, (value) {
+        onConversationChanged?.call();
+      });
+
       _isConnected = true;
       _isConnecting = false;
       notifyListeners();
@@ -326,6 +352,9 @@ class NotificationsProvider extends ChangeNotifier {
       }
       if (_messageSubscription != null) {
         _liveQuery!.client.unSubscribe(_messageSubscription!);
+      }
+      if (_conversationSubscription != null) {
+        _liveQuery!.client.unSubscribe(_conversationSubscription!);
       }
     }
     _isConnected = false;

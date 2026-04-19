@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../config/back4app_config.dart';
 import '../providers/auth_provider.dart';
+import '../providers/notifications_provider.dart';
 import '../services/api_service.dart';
 import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
@@ -372,6 +373,14 @@ class _LiveChatScreenState extends State<LiveChatScreen>
         );
         _resolvedConversationId = conv.id;
         _setupLiveQuery(); // Start listening now
+        // Eagerly notify the provider so the chat list and notification
+        // feed pick up the new conversation without waiting for LiveQuery.
+        if (mounted) {
+          context
+              .read<NotificationsProvider>()
+              .onConversationChanged
+              ?.call();
+        }
       } catch (e) {
         debugPrint('Failed to create conversation: $e');
         return;
