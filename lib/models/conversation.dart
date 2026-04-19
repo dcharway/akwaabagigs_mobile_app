@@ -1,5 +1,6 @@
 class Conversation {
   final String id;
+  final String type;
   final String? jobId;
   final String? jobTitle;
   final String posterId;
@@ -19,6 +20,7 @@ class Conversation {
 
   Conversation({
     required this.id,
+    this.type = 'one_to_one',
     this.jobId,
     this.jobTitle,
     required this.posterId,
@@ -80,6 +82,7 @@ class Conversation {
 
     return Conversation(
       id: json['id'] ?? '',
+      type: json['type'] ?? 'one_to_one',
       jobId: json['jobId'],
       jobTitle: json['jobTitle'],
       posterId: json['posterId'] ?? '',
@@ -102,6 +105,7 @@ class Conversation {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'type': type,
       'jobId': jobId,
       'jobTitle': jobTitle,
       'posterId': posterId,

@@ -536,7 +536,7 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF4CAF50).withOpacity(0.1),
+          color: const Color(0x194CAF50),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFF4CAF50)),
         ),
@@ -628,7 +628,7 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF4CAF50).withOpacity(0.1),
+        color: const Color(0x194CAF50),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF4CAF50)),
       ),

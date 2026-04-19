@@ -341,18 +341,12 @@ class ApiService {
     final user = await ParseUser.currentUser() as ParseUser?;
     if (user == null) throw Exception('Not authenticated');
 
-    // Primary: query by participants array (many-to-many)
+    // Query by participants array (many-to-many)
     final participantsQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('participants', user.objectId);
 
-    // Fallback: legacy participantA/participantB/posterId/seekerEmail
-    final legacyAQuery = QueryBuilder<ParseObject>(
-        ParseObject(Back4AppConfig.conversationClass))
-      ..whereEqualTo('participantA', user.objectId);
-    final legacyBQuery = QueryBuilder<ParseObject>(
-        ParseObject(Back4AppConfig.conversationClass))
-      ..whereEqualTo('participantB', user.objectId);
+    // Fallback: posterId/seekerEmail (string fields, not pointers)
     final posterQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.conversationClass))
       ..whereEqualTo('posterId', user.objectId);
@@ -365,6 +359,8 @@ class ApiService {
         [participantsQuery, legacyAQuery, legacyBQuery, posterQuery, seekerQuery])
       ..orderByDescending('lastMessageAt')
       ..setLimit(50);
+        [participantsQuery, posterQuery, seekerQuery])
+      ..orderByDescending('lastMessageAt');
 
     final response = await mainQuery.query();
     if (response.success && response.results != null) {
@@ -401,11 +397,7 @@ class ApiService {
           'Both participantAId and participantBId are required');
     }
 
-    // Resolve Firestore document references for both participants
-    final participantARef = ParseObject('_User')..objectId = participantAId;
-    final participantBRef = ParseObject('_User')..objectId = participantBId;
-
-    // Build participants list from explicit IDs (deterministic, no inference)
+    // Build participants list from explicit IDs
     final participantsList = <String>{participantAId, participantBId}
         .toList();
 
@@ -434,27 +426,24 @@ class ApiService {
     }
 
     final conversation = ParseObject(Back4AppConfig.conversationClass)
+      ..set('type', 'one_to_one')
       ..set('jobId', jobId)
       ..set('posterId', posterId)
       ..set('posterName', posterName)
       ..set('seekerId', resolvedSeekerId)
       ..set('seekerEmail', seekerEmail ?? '')
       ..set('seekerName', seekerName ?? '')
-      // Many-to-many participants array (user objectIds)
       ..set('participants', participantsList)
       ..set('participantNames', participantNamesMap)
-      // Store document references for each participant
-      ..set('participantARef', participantARef.toPointer())
-      ..set('participantBRef', participantBRef.toPointer())
-      // Legacy compat
-      ..set('participantA', participantAId)
-      ..set('participantB', participantBId)
       ..set('lastMessageAt', DateTime.now().toIso8601String())
       ..set('messageCount', 0);
 
-    final convAcl = ParseACL()
-      ..setPublicReadAccess(allowed: true)
-      ..setPublicWriteAccess(allowed: true);
+    // ACL: only participants can read/write
+    final convAcl = ParseACL();
+    for (final uid in participantsList) {
+      convAcl.setReadAccess(userId: uid, allowed: true);
+      convAcl.setWriteAccess(userId: uid, allowed: true);
+    }
     conversation.setACL(convAcl);
 
     // Look up job title
@@ -2043,6 +2032,7 @@ class ApiService {
   static Map<String, dynamic> _parseObjectToConversationMap(ParseObject obj) {
     return {
       'id': obj.objectId ?? '',
+      'type': obj.get<String>('type') ?? 'one_to_one',
       'jobId': obj.get<String>('jobId'),
       'jobTitle': obj.get<String>('jobTitle'),
       'posterId': obj.get<String>('posterId') ?? '',
@@ -2054,8 +2044,6 @@ class ApiService {
       'participantNames': obj.get<Map>('participantNames') != null
           ? Map<String, String>.from(obj.get<Map>('participantNames')!)
           : <String, String>{},
-      'participantA': obj.get<String>('participantA') ?? '',
-      'participantB': obj.get<String>('participantB') ?? '',
       'lastMessageText': obj.get<String>('lastMessageText'),
       'lastMessageSenderId': obj.get<String>('lastMessageSenderId'),
       'lastMessageAt': obj.get<String>('lastMessageAt'),

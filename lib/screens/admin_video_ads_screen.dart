@@ -112,7 +112,7 @@ class _AdminVideoAdsScreenState extends State<AdminVideoAdsScreen> {
                   height: 44,
                   decoration: BoxDecoration(
                     color: isLive
-                        ? const Color(0xFF4CAF50).withOpacity(0.1)
+                        ? const Color(0x194CAF50)
                         : AppColors.gray100,
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -147,7 +147,7 @@ class _AdminVideoAdsScreenState extends State<AdminVideoAdsScreen> {
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: isLive
-                            ? const Color(0xFF4CAF50).withOpacity(0.1)
+                            ? const Color(0x194CAF50)
                             : isActive
                                 ? AppColors.amber50
                                 : AppColors.gray100,
