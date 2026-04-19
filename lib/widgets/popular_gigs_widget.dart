@@ -60,9 +60,9 @@ class PopularGigsWidget extends StatelessWidget {
               ),
             )
           else if (gigs.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: const Center(
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(
                 child: Column(
                   children: [
                     Icon(
@@ -127,22 +127,26 @@ class PopularGigsWidget extends StatelessWidget {
                       width: 80,
                       height: 80,
                       fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        width: 80,
-                        height: 80,
+                      placeholder: (_, __) => const ColoredBox(
                         color: AppColors.amber50,
-                        child: const Icon(
-                          Icons.work_outline,
-                          color: AppColors.amber600,
+                        child: SizedBox(
+                          width: 80,
+                          height: 80,
+                          child: Icon(
+                            Icons.work_outline,
+                            color: AppColors.amber600,
+                          ),
                         ),
                       ),
-                      errorWidget: (_, __, ___) => Container(
-                        width: 80,
-                        height: 80,
+                      errorWidget: (_, __, ___) => const ColoredBox(
                         color: AppColors.amber50,
-                        child: const Icon(
-                          Icons.work_outline,
-                          color: AppColors.amber600,
+                        child: SizedBox(
+                          width: 80,
+                          height: 80,
+                          child: Icon(
+                            Icons.work_outline,
+                            color: AppColors.amber600,
+                          ),
                         ),
                       ),
                     )

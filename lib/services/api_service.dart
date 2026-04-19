@@ -132,7 +132,8 @@ class ApiService {
   static Future<List<Job>> getJobs() async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.jobClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     final response = await query.query();
     if (response.success && response.results != null) {
@@ -164,7 +165,8 @@ class ApiService {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.jobClass))
       ..whereEqualTo('posterId', user.objectId)
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     final response = await query.query();
     if (response.success && response.results != null) {
@@ -300,7 +302,8 @@ class ApiService {
   }) async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.applicationClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(200);
 
     if (email != null) query.whereEqualTo('email', email);
     if (jobId != null) query.whereEqualTo('jobId', jobId);
@@ -356,7 +359,8 @@ class ApiService {
     final mainQuery = QueryBuilder.or(
         ParseObject(Back4AppConfig.conversationClass),
         [participantsQuery, legacyAQuery, legacyBQuery, posterQuery, seekerQuery])
-      ..orderByDescending('lastMessageAt');
+      ..orderByDescending('lastMessageAt')
+      ..setLimit(50);
 
     final response = await mainQuery.query();
     if (response.success && response.results != null) {
@@ -472,7 +476,8 @@ class ApiService {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.messageClass))
       ..whereEqualTo('conversationId', conversationId)
-      ..orderByAscending('createdAt');
+      ..orderByAscending('createdAt')
+      ..setLimit(200);
 
     final response = await query.query();
     if (response.success && response.results != null) {
@@ -751,18 +756,16 @@ class ApiService {
   }
 
   static Future<List<String>> uploadGigImages(List<File> files) async {
-    final urls = <String>[];
-    for (final file in files) {
+    final futures = files.map((file) async {
       final fileName = file.path.split('/').last;
       final parseFile = ParseFile(file, name: fileName);
       final response = await parseFile.save();
       if (response.success && parseFile.url != null) {
-        urls.add(parseFile.url!);
-      } else {
-        throw Exception('Failed to upload image');
+        return parseFile.url!;
       }
-    }
-    return urls;
+      throw Exception('Failed to upload image');
+    });
+    return Future.wait(futures);
   }
 
   static Future<String> uploadProfilePicture(File file,
@@ -812,7 +815,8 @@ class ApiService {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.ratingClass))
       ..whereEqualTo('gigSeekerId', email)
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     final response = await query.query();
     if (response.success) {
@@ -1245,7 +1249,8 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getInventory() async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.inventoryClass))
-      ..orderByAscending('productName');
+      ..orderByAscending('productName')
+      ..setLimit(500);
 
     final response = await query.query();
     if (response.success && response.results != null) {
@@ -1417,7 +1422,8 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getAllVideoAds() async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.videoAdClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(50);
     final response = await query.query();
     if (response.success && response.results != null) {
       return response.results!
@@ -1639,7 +1645,8 @@ class ApiService {
   }) async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.productClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     if (activeOnly) {
       query.whereEqualTo('status', 'active');
@@ -1818,7 +1825,8 @@ class ApiService {
 
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.orderClass))
-      ..orderByDescending('createdAt');
+      ..orderByDescending('createdAt')
+      ..setLimit(100);
 
     if (!adminView) {
       query.whereEqualTo('buyerId', user.objectId);

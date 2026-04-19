@@ -4,13 +4,14 @@ import '../services/api_service.dart';
 
 class JobsProvider extends ChangeNotifier {
   List<Job> _jobs = [];
+  List<Job>? _filteredCache;
   bool _isLoading = false;
   String? _error;
   String _searchQuery = '';
   String? _selectedCategory;
   String? _selectedLocation;
 
-  List<Job> get jobs => _filteredJobs;
+  List<Job> get jobs => _filteredCache ??= _computeFiltered();
   List<Job> get allJobs => _jobs;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -18,12 +19,13 @@ class JobsProvider extends ChangeNotifier {
   String? get selectedCategory => _selectedCategory;
   String? get selectedLocation => _selectedLocation;
 
-  List<Job> get _filteredJobs {
+  void _invalidateCache() => _filteredCache = null;
+
+  List<Job> _computeFiltered() {
     var filtered = _jobs
         .where((job) => job.status == 'active' || job.status == 'bid_agreed')
         .toList();
 
-    // Sort: featured first, then urgent, then by date
     filtered.sort((a, b) {
       if (a.isCurrentlyFeatured && !b.isCurrentlyFeatured) return -1;
       if (!a.isCurrentlyFeatured && b.isCurrentlyFeatured) return 1;
@@ -31,7 +33,7 @@ class JobsProvider extends ChangeNotifier {
       if (!a.isUrgent && b.isUrgent) return 1;
       return b.postedDate.compareTo(a.postedDate);
     });
-    
+
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       filtered = filtered.where((job) =>
@@ -42,7 +44,7 @@ class JobsProvider extends ChangeNotifier {
     }
 
     if (_selectedCategory != null && _selectedCategory!.isNotEmpty) {
-      filtered = filtered.where((job) => 
+      filtered = filtered.where((job) =>
         job.category?.toLowerCase() == _selectedCategory!.toLowerCase()
       ).toList();
     }
@@ -92,9 +94,10 @@ class JobsProvider extends ChangeNotifier {
 
   Future<void> loadJobs() async {
     if (_isLoading) return;
-    
+
     _isLoading = true;
     _error = null;
+    _invalidateCache();
     notifyListeners();
 
     try {
@@ -104,21 +107,25 @@ class JobsProvider extends ChangeNotifier {
     }
 
     _isLoading = false;
+    _invalidateCache();
     notifyListeners();
   }
 
   void setSearchQuery(String query) {
     _searchQuery = query;
+    _invalidateCache();
     notifyListeners();
   }
 
   void setCategory(String? category) {
     _selectedCategory = category;
+    _invalidateCache();
     notifyListeners();
   }
 
   void setLocation(String? location) {
     _selectedLocation = location;
+    _invalidateCache();
     notifyListeners();
   }
 
@@ -126,14 +133,14 @@ class JobsProvider extends ChangeNotifier {
     _searchQuery = '';
     _selectedCategory = null;
     _selectedLocation = null;
+    _invalidateCache();
     notifyListeners();
   }
 
   Job? getJobById(String id) {
-    try {
-      return _jobs.firstWhere((job) => job.id == id);
-    } catch (e) {
-      return null;
+    for (final job in _jobs) {
+      if (job.id == id) return job;
     }
+    return null;
   }
 }

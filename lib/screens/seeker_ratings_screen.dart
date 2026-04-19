@@ -18,6 +18,8 @@ class SeekerRatingsScreen extends StatefulWidget {
 }
 
 class _SeekerRatingsScreenState extends State<SeekerRatingsScreen> {
+  static final _dateFormat = DateFormat('MMM d, yyyy');
+
   SeekerRatingSummary? _summary;
   bool _isLoading = true;
 
@@ -127,7 +129,7 @@ class _SeekerRatingsScreenState extends State<SeekerRatingsScreen> {
   }
 
   Widget _buildRatingCard(Rating rating) {
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = _dateFormat;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),

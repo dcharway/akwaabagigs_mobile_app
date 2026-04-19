@@ -18,6 +18,8 @@ class JobApplicationsScreen extends StatefulWidget {
 }
 
 class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
+  static final _dateFormat = DateFormat('MMM d, yyyy');
+
   List<Application> _applications = [];
   bool _isLoading = true;
   String? _error;
@@ -291,7 +293,7 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
   }
 
   Widget _buildApplicationCard(Application app) {
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = _dateFormat;
     final statusColor = _statusColor(app.status);
 
     return Card(

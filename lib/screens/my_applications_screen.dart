@@ -13,6 +13,8 @@ class MyApplicationsScreen extends StatefulWidget {
 }
 
 class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
+  static final _dateFormat = DateFormat('MMM d, yyyy');
+
   List<Application> _applications = [];
   bool _isLoading = true;
   String? _error;
@@ -132,7 +134,7 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
   }
 
   Widget _buildApplicationCard(Application app) {
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = _dateFormat;
     final statusColor = _statusColor(app.status);
 
     return Card(

@@ -5,6 +5,9 @@ import '../providers/notifications_provider.dart';
 import '../utils/colors.dart';
 
 class NotificationsScreen extends StatelessWidget {
+  static final _timeFormat = DateFormat('h:mm a');
+  static final _dateFormat = DateFormat('MMM d');
+
   const NotificationsScreen({super.key});
 
   @override
@@ -109,8 +112,8 @@ class NotificationsScreen extends StatelessWidget {
     NotificationsProvider provider,
     int index,
   ) {
-    final timeFormat = DateFormat('h:mm a');
-    final dateFormat = DateFormat('MMM d');
+    final timeFormat = _timeFormat;
+    final dateFormat = _dateFormat;
     final now = DateTime.now();
     final isToday = notif.timestamp.day == now.day &&
         notif.timestamp.month == now.month &&

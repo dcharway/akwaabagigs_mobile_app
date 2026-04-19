@@ -20,6 +20,8 @@ class JobDetailsScreen extends StatefulWidget {
 }
 
 class _JobDetailsScreenState extends State<JobDetailsScreen> {
+  static final _dateFormat = DateFormat('MMM d, yyyy');
+
   bool _isSaved = false;
 
   @override
@@ -47,7 +49,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = _dateFormat;
 
     return Scaffold(
       appBar: AppBar(
