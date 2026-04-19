@@ -188,7 +188,7 @@ class NotificationsProvider extends ChangeNotifier {
           title: 'New Message',
           message:
               '${value.get<String>('senderName') ?? 'Someone'}: ${_truncate(value.get<String>('content') ?? '', 50)}',
-          data: {'chatRoomId': value.get<String>('chatRoomId')},
+          data: {'conversationId': value.get<String>('conversationId')},
         );
       });
 
