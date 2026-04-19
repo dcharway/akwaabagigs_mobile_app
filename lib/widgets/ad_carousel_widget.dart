@@ -3,6 +3,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../models/media_asset.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
 
@@ -15,12 +16,11 @@ class AdCarouselWidget extends StatefulWidget {
 
 class _AdCarouselWidgetState extends State<AdCarouselWidget> {
   int _currentIndex = 0;
-  List<Map<String, dynamic>> _videoAds = [];
+  List<MediaAsset> _assets = [];
   bool _isLoading = true;
   final Map<int, VideoPlayerController> _videoControllers = {};
 
-  // Fallback ads when no video ads are scheduled
-  static const List<Map<String, String>> _defaultAds = [
+  static const List<Map<String, String>> _defaultCards = [
     {
       'title': 'Welcome to Akwaaba',
       'description': 'Your trusted platform for all services in Ghana',
@@ -41,30 +41,27 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
   @override
   void initState() {
     super.initState();
-    _loadVideoAds();
+    _loadAssets();
   }
 
   @override
   void dispose() {
-    for (final controller in _videoControllers.values) {
-      controller.dispose();
+    for (final c in _videoControllers.values) {
+      c.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _loadVideoAds() async {
+  Future<void> _loadAssets() async {
     try {
-      final ads = await ApiService.getActiveVideoAds();
+      final raw = await ApiService.getActiveMediaAssets();
       if (mounted) {
         setState(() {
-          _videoAds = ads;
+          _assets = raw.map((m) => MediaAsset.fromJson(m)).toList();
           _isLoading = false;
         });
-        // Pre-initialize first video
-        if (_videoAds.isNotEmpty) {
-          _initVideoController(0);
-          // Track impression for first ad
-          _trackImpression(0);
+        if (_assets.isNotEmpty && _assets[0].isVideo) {
+          _initVideo(0);
         }
       }
     } catch (_) {
@@ -72,69 +69,54 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
     }
   }
 
-  Future<void> _initVideoController(int index) async {
-    if (_videoControllers.containsKey(index)) return;
-    if (index >= _videoAds.length) return;
+  // ---- video lifecycle ----
 
-    final videoUrl = _videoAds[index]['videoUrl'] as String;
-    if (videoUrl.isEmpty) return;
+  Future<void> _initVideo(int index) async {
+    if (_videoControllers.containsKey(index)) return;
+    if (index >= _assets.length || !_assets[index].isVideo) return;
+
+    final url = _assets[index].fileUrl;
+    if (url == null || url.isEmpty) return;
 
     try {
       final controller =
-          VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+          VideoPlayerController.networkUrl(Uri.parse(url));
       _videoControllers[index] = controller;
-
       await controller.initialize();
       controller.setLooping(true);
-      controller.setVolume(0); // Muted by default in feed
+      controller.setVolume(0);
 
       if (index == _currentIndex && mounted) {
         controller.play();
         setState(() {});
       }
-    } catch (_) {
-      // Video failed to load — card will show thumbnail/fallback
-    }
+    } catch (_) {}
   }
 
   void _onPageChanged(int index) {
-    // Pause previous video
     _videoControllers[_currentIndex]?.pause();
-
     setState(() => _currentIndex = index);
 
-    if (_videoAds.isNotEmpty && index < _videoAds.length) {
-      // Initialize and play current video
-      _initVideoController(index);
-      _videoControllers[index]?.play();
-
-      // Pre-init next video
-      if (index + 1 < _videoAds.length) {
-        _initVideoController(index + 1);
+    if (index < _assets.length) {
+      final asset = _assets[index];
+      if (asset.isVideo) {
+        _initVideo(index);
+        _videoControllers[index]?.play();
       }
-
-      _trackImpression(index);
+      // pre-init next video
+      if (index + 1 < _assets.length && _assets[index + 1].isVideo) {
+        _initVideo(index + 1);
+      }
     }
   }
 
-  void _trackImpression(int index) {
-    if (index < _videoAds.length) {
-      final adId = _videoAds[index]['id'] as String;
-      ApiService.trackAdImpression(adId);
-    }
-  }
-
-  void _trackClick(int index) {
-    if (index < _videoAds.length) {
-      final adId = _videoAds[index]['id'] as String;
-      ApiService.trackAdClick(adId);
-    }
-  }
+  // ---- build ----
 
   @override
   Widget build(BuildContext context) {
-    final hasVideoAds = _videoAds.isNotEmpty;
-    final itemCount = hasVideoAds ? _videoAds.length : _defaultAds.length;
+    final hasAssets = _assets.isNotEmpty;
+    final itemCount = hasAssets ? _assets.length : _defaultCards.length;
+    final hasAnyVideo = _assets.any((a) => a.isVideo);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
@@ -155,7 +137,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
                     ),
                   ),
                 ),
-                if (hasVideoAds)
+                if (hasAnyVideo)
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 3),
@@ -196,7 +178,8 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Center(
-                child: CircularProgressIndicator(color: AppColors.amber600),
+                child:
+                    CircularProgressIndicator(color: AppColors.amber600),
               ),
             )
           else
@@ -204,16 +187,14 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
               options: CarouselOptions(
                 height: 200,
                 viewportFraction: 1.0,
-                autoPlay: !hasVideoAds, // Don't auto-play if videos
+                autoPlay: !hasAnyVideo,
                 autoPlayInterval: const Duration(seconds: 5),
                 enlargeCenterPage: false,
-                onPageChanged: (index, reason) => _onPageChanged(index),
+                onPageChanged: (index, _) => _onPageChanged(index),
               ),
-              items: List.generate(itemCount, (index) {
-                if (hasVideoAds) {
-                  return _buildVideoAdCard(index);
-                }
-                return _buildDefaultCard(_defaultAds[index]);
+              items: List.generate(itemCount, (i) {
+                if (hasAssets) return _buildAssetCard(i);
+                return _buildDefaultCard(_defaultCards[i]);
               }),
             ),
           const SizedBox(height: 16),
@@ -235,23 +216,102 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
     );
   }
 
-  Widget _buildVideoAdCard(int index) {
-    final ad = _videoAds[index];
+  // ---- asset card (image or video) ----
+
+  Widget _buildAssetCard(int index) {
+    final asset = _assets[index];
+
+    if (asset.isVideo) return _buildVideoCard(index, asset);
+    return _buildImageCard(asset);
+  }
+
+  Widget _buildImageCard(MediaAsset asset) {
+    final url = asset.fileUrl;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Colors.black,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (url != null && url.isNotEmpty)
+              CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  color: AppColors.gray800,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.amber500, strokeWidth: 2),
+                  ),
+                ),
+                errorWidget: (_, __, ___) => _buildFallbackBg(),
+              )
+            else
+              _buildFallbackBg(),
+            // gradient overlay
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 80,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.7),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // title
+            if (asset.title.isNotEmpty)
+              Positioned(
+                bottom: 14,
+                left: 14,
+                right: 14,
+                child: Text(
+                  asset.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoCard(int index, MediaAsset asset) {
     final controller = _videoControllers[index];
-    final isInitialized = controller?.value.isInitialized ?? false;
-    final thumbnailUrl = ad['thumbnailUrl'] as String?;
+    final isInit = controller?.value.isInitialized ?? false;
     final isPlaying = controller?.value.isPlaying ?? false;
 
     return GestureDetector(
       onTap: () {
-        _trackClick(index);
-        // Toggle play/pause on tap
-        if (controller != null && isInitialized) {
-          if (isPlaying) {
-            controller.pause();
-          } else {
-            controller.play();
-          }
+        if (controller != null && isInit) {
+          isPlaying ? controller.pause() : controller.play();
           setState(() {});
         }
       },
@@ -273,8 +333,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Video or thumbnail
-              if (isInitialized)
+              if (isInit)
                 FittedBox(
                   fit: BoxFit.cover,
                   child: SizedBox(
@@ -283,30 +342,16 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
                     child: VideoPlayer(controller),
                   ),
                 )
-              else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty)
-                CachedNetworkImage(
-                  imageUrl: thumbnailUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    color: AppColors.gray800,
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                          color: AppColors.amber500, strokeWidth: 2),
-                    ),
-                  ),
-                  errorWidget: (_, __, ___) =>
-                      _buildFallbackBackground(),
-                )
               else
-                _buildFallbackBackground(),
+                _buildFallbackBg(),
 
-              // Gradient overlay at bottom
+              // gradient
               Positioned(
                 bottom: 0,
                 left: 0,
                 right: 0,
                 child: Container(
-                  height: 100,
+                  height: 80,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -320,7 +365,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
                 ),
               ),
 
-              // Play/pause indicator
+              // play button
               if (!isPlaying)
                 Center(
                   child: Container(
@@ -341,59 +386,26 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
                   ),
                 ),
 
-              // Ad info overlay
-              Positioned(
-                bottom: 12,
-                left: 14,
-                right: 14,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Advertiser badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.amber500.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'AD • ${ad['advertiserName']}',
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
+              // title
+              if (asset.title.isNotEmpty)
+                Positioned(
+                  bottom: 14,
+                  left: 14,
+                  right: 14,
+                  child: Text(
+                    asset.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      ad['title'] as String,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      ad['description'] as String,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.85),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
 
-              // Video progress bar
-              if (isInitialized)
+              // progress bar
+              if (isInit)
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -410,15 +422,15 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
                   ),
                 ),
 
-              // Muted indicator
+              // mute toggle
               Positioned(
                 top: 10,
                 right: 10,
                 child: GestureDetector(
                   onTap: () {
                     if (controller != null) {
-                      final muted = controller.value.volume == 0;
-                      controller.setVolume(muted ? 1.0 : 0.0);
+                      controller.setVolume(
+                          controller.value.volume == 0 ? 1.0 : 0.0);
                       setState(() {});
                     }
                   },
@@ -445,7 +457,9 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
     );
   }
 
-  Widget _buildFallbackBackground() {
+  // ---- fallback cards ----
+
+  Widget _buildFallbackBg() {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -457,9 +471,9 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
     );
   }
 
-  Widget _buildDefaultCard(Map<String, String> ad) {
+  Widget _buildDefaultCard(Map<String, String> card) {
     IconData icon;
-    switch (ad['icon']) {
+    switch (card['icon']) {
       case 'handshake':
         icon = Icons.handshake_outlined;
         break;
@@ -526,13 +540,13 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(ad['title']!,
+                  Text(card['title']!,
                       style: const TextStyle(
                           fontSize: 18,
                           color: Colors.white,
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
-                  Text(ad['description']!,
+                  Text(card['description']!,
                       style: TextStyle(
                           fontSize: 14,
                           color: Colors.white.withOpacity(0.9))),
