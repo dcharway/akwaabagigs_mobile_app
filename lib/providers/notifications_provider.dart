@@ -3,16 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../config/back4app_config.dart';
 
-/// Severity level for a notification. Drives icon/color in the feed.
-enum NotificationSeverity { info, success, warning, error }
-
 class AppNotification {
   final String type;
   final String title;
   final String message;
   final DateTime timestamp;
   final Map<String, dynamic>? data;
-  final NotificationSeverity severity;
   bool isRead;
 
   AppNotification({
@@ -21,7 +17,6 @@ class AppNotification {
     required this.message,
     DateTime? timestamp,
     this.data,
-    this.severity = NotificationSeverity.info,
     this.isRead = false,
   }) : timestamp = timestamp ?? DateTime.now();
 }
@@ -34,9 +29,30 @@ class NotificationsProvider extends ChangeNotifier {
   LiveQuery? _liveQuery;
   Subscription? _jobSubscription;
   Subscription? _applicationSubscription;
-  Subscription? _ratingSubscription;
   Subscription? _messageSubscription;
   Subscription? _conversationSubscription;
+
+  /// The only notification types the feed will accept.
+  /// Gig category: job lifecycle, applications, bids.
+  /// Chat category: messages, conversations.
+  static const _gigTypes = {
+    'welcome',
+    'tip_seeker',
+    'tip_poster',
+    'tip_bid',
+    'job_update',
+    'job_completed',
+    'new_application',
+    'application_update',
+    'application_approved',
+    'bid_agreed',
+    'bid_approved',
+    'bid_rejected',
+  };
+  static const _chatTypes = {
+    'new_message',
+    'new_conversation',
+  };
 
   /// Callback invoked when a conversation is created or updated via
   /// LiveQuery.  ChatListScreen registers itself here so it can reload.
@@ -160,22 +176,6 @@ class NotificationsProvider extends ChangeNotifier {
         }
       });
 
-      // ---- Rating updates ----
-      final ratingQuery = QueryBuilder<ParseObject>(
-          ParseObject(Back4AppConfig.ratingClass));
-      _ratingSubscription =
-          await _liveQuery!.client.subscribe(ratingQuery);
-
-      _ratingSubscription!.on(LiveQueryEvent.create, (value) {
-        _addNotification(
-          type: 'new_rating',
-          title: 'New Rating Received',
-          message:
-              'You received a ${value.get<int>('rating') ?? 0}/5 star rating',
-          data: {'ratingId': value.objectId},
-        );
-      });
-
       // ---- Message updates (for chat notifications) ----
       final msgQuery = QueryBuilder<ParseObject>(
           ParseObject(Back4AppConfig.messageClass));
@@ -269,56 +269,15 @@ class NotificationsProvider extends ChangeNotifier {
     required String title,
     required String message,
     Map<String, dynamic>? data,
-    NotificationSeverity severity = NotificationSeverity.info,
   }) {
+    if (!_gigTypes.contains(type) && !_chatTypes.contains(type)) return;
+
     _notifications.insert(
       0,
-      AppNotification(
-        type: type,
-        title: title,
-        message: message,
-        data: data,
-        severity: severity,
-      ),
+      AppNotification(type: type, title: title, message: message, data: data),
     );
     notifyListeners();
   }
-
-  /// Public entry point used by forms/screens to push a transient
-  /// alert into the unified notification feed.
-  void push({
-    required String title,
-    required String message,
-    NotificationSeverity severity = NotificationSeverity.info,
-    String type = 'alert',
-    Map<String, dynamic>? data,
-  }) {
-    _addNotification(
-      type: type,
-      title: title,
-      message: message,
-      data: data,
-      severity: severity,
-    );
-  }
-
-  void pushInfo(String message, {String title = 'Info'}) =>
-      push(title: title, message: message, severity: NotificationSeverity.info);
-
-  void pushSuccess(String message, {String title = 'Success'}) => push(
-      title: title,
-      message: message,
-      severity: NotificationSeverity.success);
-
-  void pushWarning(String message, {String title = 'Warning'}) => push(
-      title: title,
-      message: message,
-      severity: NotificationSeverity.warning);
-
-  void pushError(String message, {String title = 'Error'}) => push(
-      title: title,
-      message: message,
-      severity: NotificationSeverity.error);
 
   void markAllRead() {
     for (final n in _notifications) {
@@ -346,9 +305,6 @@ class NotificationsProvider extends ChangeNotifier {
       }
       if (_applicationSubscription != null) {
         _liveQuery!.client.unSubscribe(_applicationSubscription!);
-      }
-      if (_ratingSubscription != null) {
-        _liveQuery!.client.unSubscribe(_ratingSubscription!);
       }
       if (_messageSubscription != null) {
         _liveQuery!.client.unSubscribe(_messageSubscription!);
