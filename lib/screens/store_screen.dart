@@ -24,6 +24,8 @@ class _StoreScreenState extends State<StoreScreen> {
   bool _isAdmin = false;
   LiveQuery? _liveQuery;
   Subscription? _productSubscription;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   static const List<String> _categories = [
     'Fashion',
@@ -45,6 +47,7 @@ class _StoreScreenState extends State<StoreScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     if (_liveQuery != null && _productSubscription != null) {
       _liveQuery!.client.unSubscribe(_productSubscription!);
     }
@@ -78,7 +81,10 @@ class _StoreScreenState extends State<StoreScreen> {
   Future<void> _loadProducts() async {
     setState(() => _isLoading = true);
     try {
-      _products = await ApiService.getProducts(category: _selectedCategory);
+      _products = await ApiService.getProducts(
+        category: _selectedCategory,
+        search: _searchQuery.isEmpty ? null : _searchQuery,
+      );
     } catch (_) {}
     if (mounted) setState(() => _isLoading = false);
   }
@@ -118,6 +124,38 @@ class _StoreScreenState extends State<StoreScreen> {
       ),
       body: Column(
         children: [
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search products...',
+                prefixIcon: const Icon(Icons.search, color: AppColors.gray500),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: AppColors.gray500),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                          _loadProducts();
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: AppColors.gray100,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (value) {
+                setState(() => _searchQuery = value);
+                _loadProducts();
+              },
+            ),
+          ),
           // Category filter
           SizedBox(
             height: 48,
@@ -242,94 +280,139 @@ class _StoreScreenState extends State<StoreScreen> {
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            // Image
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12)),
-                child: images.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: images.first,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
-                          color: AppColors.red50,
-                          child: const Center(
-                            child: Icon(Icons.shopping_bag,
-                                color: AppColors.red600, size: 32),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Image
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(12)),
+                    child: images.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: images.first,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              color: AppColors.red50,
+                              child: const Center(
+                                child: Icon(Icons.shopping_bag,
+                                    color: AppColors.red600, size: 32),
+                              ),
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              color: AppColors.red50,
+                              child: const Center(
+                                child: Icon(Icons.shopping_bag,
+                                    color: AppColors.red600, size: 32),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            color: AppColors.red50,
+                            child: const Center(
+                              child: Icon(Icons.shopping_bag,
+                                  color: AppColors.red600, size: 32),
+                            ),
                           ),
-                        ),
-                        errorWidget: (_, __, ___) => Container(
-                          color: AppColors.red50,
-                          child: const Center(
-                            child: Icon(Icons.shopping_bag,
-                                color: AppColors.red600, size: 32),
-                          ),
-                        ),
-                      )
-                    : Container(
-                        color: AppColors.red50,
-                        child: const Center(
-                          child: Icon(Icons.shopping_bag,
-                              color: AppColors.red600, size: 32),
-                        ),
-                      ),
-              ),
-            ),
-            // Info
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product['name'] as String,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: AppColors.gray900,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ),
+                // Info
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'GH₵ ${priceGhs.toStringAsFixed(0)}',
+                        product['name'] as String,
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: AppColors.red700,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: AppColors.gray900,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (stock <= 5 && stock > 0)
-                        Text(
-                          '$stock left',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.orange.shade700,
-                            fontWeight: FontWeight.w600,
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'GH₵ ${priceGhs.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: AppColors.red700,
+                            ),
                           ),
-                        ),
-                      if (stock <= 0)
-                        const Text(
-                          'Sold out',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.red600,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                          if (stock <= 5 && stock > 0)
+                            Text(
+                              '$stock left',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.orange.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          if (stock <= 0)
+                            const Text(
+                              'Sold out',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: AppColors.red600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+            // Sold out overlay
+            if (stock <= 0)
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    color: Colors.black.withOpacity(0.55),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'SOLD OUT',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // Low stock badge
+            if (stock > 0 && stock <= (product['lowStockThreshold'] ?? 5))
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade700,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Low Stock',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
