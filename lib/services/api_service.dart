@@ -1309,8 +1309,9 @@ class ApiService {
   static Future<void> adjustStock({
     required String inventoryId,
     required String productId,
-    required int adjustment, // positive = restock, negative = sold/removed
-    required String reason, // 'restock', 'sale', 'damage', 'correction'
+    required String productName,
+    required int adjustment,
+    required String reason,
   }) async {
     final user = await ParseUser.currentUser() as ParseUser?;
     if (user == null) throw Exception('Not authenticated');
@@ -1333,11 +1334,19 @@ class ApiService {
           'Failed to adjust inventory: ${invResponse.error?.message}');
     }
 
-    // Sync Product.stock to match
+    // Sync Product.stock and log the change in parallel
     final product = ParseObject(Back4AppConfig.productClass)
       ..objectId = productId;
     product.setIncrement('stock', adjustment);
-    await product.save();
+    await Future.wait([
+      product.save(),
+      logInventoryChange(
+        productId: productId,
+        productName: productName,
+        adjustment: adjustment,
+        reason: reason,
+      ),
+    ]);
   }
 
   /// Update inventory fields (threshold, location).
@@ -1359,6 +1368,65 @@ class ApiService {
       throw Exception(
           'Failed to update inventory: ${response.error?.message}');
     }
+  }
+
+  /// Write an audit entry to InventoryLog whenever stock changes.
+  static Future<void> logInventoryChange({
+    required String productId,
+    required String productName,
+    required int adjustment,
+    required String reason,
+    String? orderId,
+  }) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    final log = ParseObject(Back4AppConfig.inventoryLogClass)
+      ..set('productId', productId)
+      ..set('productName', productName)
+      ..set('adjustment', adjustment)
+      ..set('reason', reason)
+      ..set('performedBy', user?.objectId ?? 'system')
+      ..set('performedAt', DateTime.now().toIso8601String());
+    if (orderId != null) log.set('orderId', orderId);
+
+    final acl = ParseACL()
+      ..setPublicReadAccess(allowed: true)
+      ..setPublicWriteAccess(allowed: false);
+    log.setACL(acl);
+
+    await log.save();
+  }
+
+  static Future<List<Map<String, dynamic>>> getInventoryLogs({
+    String? productId,
+    int limit = 100,
+  }) async {
+    final query = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.inventoryLogClass))
+      ..orderByDescending('createdAt')
+      ..setLimit(limit);
+
+    if (productId != null) {
+      query.whereEqualTo('productId', productId);
+    }
+
+    final response = await query.query();
+    if (response.success && response.results != null) {
+      return response.results!.map((e) {
+        final obj = e as ParseObject;
+        return {
+          'id': obj.objectId ?? '',
+          'productId': obj.get<String>('productId') ?? '',
+          'productName': obj.get<String>('productName') ?? '',
+          'adjustment': obj.get<int>('adjustment') ?? 0,
+          'reason': obj.get<String>('reason') ?? '',
+          'orderId': obj.get<String>('orderId'),
+          'performedBy': obj.get<String>('performedBy') ?? '',
+          'performedAt': obj.get<String>('performedAt') ?? '',
+          'createdAt': obj.createdAt?.toIso8601String() ?? '',
+        };
+      }).toList();
+    }
+    return [];
   }
 
   /// Update product price (admin only). Separate from stock for clarity.
@@ -1703,6 +1771,7 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getProducts({
     String? category,
+    String? search,
     bool activeOnly = true,
   }) async {
     final query = QueryBuilder<ParseObject>(
@@ -1715,6 +1784,9 @@ class ApiService {
     }
     if (category != null) {
       query.whereEqualTo('category', category);
+    }
+    if (search != null && search.isNotEmpty) {
+      query.whereContains('name', search);
     }
 
     final response = await query.query();
@@ -1747,6 +1819,7 @@ class ApiService {
     required int pricePesewas,
     required int stock,
     required String category,
+    int lowStockThreshold = 5,
     List<String>? imageUrls,
   }) async {
     final user = await ParseUser.currentUser() as ParseUser?;
@@ -1760,11 +1833,12 @@ class ApiService {
       ..set('description', description)
       ..set('pricePesewas', pricePesewas)
       ..set('stock', stock)
+      ..set('lowStockThreshold', lowStockThreshold)
+      ..set('totalSold', 0)
       ..set('category', category)
       ..set('status', 'active')
       ..set('sellerId', user.objectId)
-      ..set('sellerName',
-          _fullName(user));
+      ..set('sellerName', _fullName(user));
 
     if (imageUrls != null && imageUrls.isNotEmpty) {
       product.set('images', imageUrls);
@@ -1827,6 +1901,15 @@ class ApiService {
     final user = await ParseUser.currentUser() as ParseUser?;
     if (user == null) throw Exception('Not authenticated');
 
+    // Validate stock before placing order
+    final product = await getProduct(productId);
+    if (product == null) throw Exception('Product not found');
+    final currentStock = product['stock'] as int;
+    if (currentStock < quantity) {
+      throw Exception(
+          currentStock == 0 ? 'This item is sold out' : 'Only $currentStock left in stock');
+    }
+
     final totalPesewas = pricePesewas * quantity;
     final commissionPesewas = (totalPesewas * 0.04).round(); // 4% commission
 
@@ -1855,13 +1938,14 @@ class ApiService {
           'Failed to create order: ${response.error?.message}');
     }
 
-    // Decrement stock and record payment in parallel
-    final product = ParseObject(Back4AppConfig.productClass)
+    // Decrement stock, increment totalSold, record payment, and log
+    final productUpdate = ParseObject(Back4AppConfig.productClass)
       ..objectId = productId;
-    product.setDecrement('stock', quantity);
+    productUpdate.setDecrement('stock', quantity);
+    productUpdate.setIncrement('totalSold', quantity);
 
     await Future.wait([
-      product.save(),
+      productUpdate.save(),
       recordPayment(
         jobId: 'store_$productId',
         amount: (totalPesewas / 100).round(),
@@ -1870,6 +1954,13 @@ class ApiService {
         paymentTier: 'store_purchase',
         duration: 'one-time',
         phone: buyerPhone,
+      ),
+      logInventoryChange(
+        productId: productId,
+        productName: productName,
+        adjustment: -quantity,
+        reason: 'sale',
+        orderId: response.result?.objectId,
       ),
     ]);
 
@@ -1924,6 +2015,8 @@ class ApiService {
       'description': obj.get<String>('description') ?? '',
       'pricePesewas': obj.get<int>('pricePesewas') ?? 0,
       'stock': obj.get<int>('stock') ?? 0,
+      'lowStockThreshold': obj.get<int>('lowStockThreshold') ?? 5,
+      'totalSold': obj.get<int>('totalSold') ?? 0,
       'category': obj.get<String>('category') ?? '',
       'status': obj.get<String>('status') ?? 'active',
       'images': obj.get<List>('images')?.cast<String>() ?? [],

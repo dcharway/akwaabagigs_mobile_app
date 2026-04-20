@@ -240,10 +240,65 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       style: const TextStyle(
                           color: AppColors.gray700, height: 1.5)),
 
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
+
+                  // Stock status banner
+                  if (stock == 0)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red.shade300),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'This item is currently sold out',
+                              style: TextStyle(
+                                color: Colors.red.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (stock <= 5)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.amber.shade300),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Only $stock left in stock — order soon!',
+                              style: TextStyle(
+                                color: Colors.amber.shade800,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   if (stock > 0) ...[
-                    const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 16),
                     // Quantity
                     const Text('Quantity',
                         style: TextStyle(
@@ -329,37 +384,40 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    // Buy button
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _isPurchasing ? null : _purchase,
-                        icon: _isPurchasing
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white))
-                            : const Icon(Icons.shopping_cart),
-                        label: Text(
-                          'Buy Now — GH₵ ${totalGhs.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.red600,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 16),
-                          shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(12)),
-                        ),
+                  ],
+                  // Buy button
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: stock <= 0 || _isPurchasing ? null : _purchase,
+                      icon: _isPurchasing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white))
+                          : const Icon(Icons.shopping_cart),
+                      label: Text(
+                        stock <= 0
+                            ? 'Sold Out'
+                            : 'Buy Now — GH₵ ${totalGhs.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor:
+                            stock <= 0 ? Colors.grey : AppColors.red600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(12)),
                       ),
                     ),
-                  ],
+                  ),
                   const SizedBox(height: 24),
                 ],
               ),

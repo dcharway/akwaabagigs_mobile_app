@@ -19,14 +19,17 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _inventory = [];
   List<Map<String, dynamic>> _orders = [];
+  List<Map<String, dynamic>> _logs = [];
   bool _isLoading = true;
   LiveQuery? _liveQuery;
   Subscription? _productSubscription;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
     _subscribeLiveQuery();
   }
@@ -34,6 +37,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     _unsubscribeLiveQuery();
     super.dispose();
   }
@@ -44,6 +48,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
       _products = await ApiService.getProducts(activeOnly: false);
       _inventory = await ApiService.getInventory();
       _orders = await ApiService.getOrders(adminView: true);
+      _logs = await ApiService.getInventoryLogs();
     } catch (_) {}
     if (mounted) setState(() => _isLoading = false);
   }
@@ -73,6 +78,16 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
             (i['quantity'] as int) <= (i['restockThreshold'] as int))
         .length;
 
+    // Metrics
+    final totalProducts = _products.length;
+    final totalRevenue = _orders.fold<int>(
+        0, (sum, o) => sum + (o['totalPesewas'] as int)) / 100;
+    final lowStockCount = _products
+        .where((p) => (p['stock'] as int) <= (p['lowStockThreshold'] ?? 5))
+        .length;
+    final outOfStockCount =
+        _products.where((p) => (p['stock'] as int) == 0).length;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Store'),
@@ -83,6 +98,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
+          isScrollable: true,
           tabs: [
             Tab(text: 'Products (${_products.length})',
                 icon: const Icon(Icons.inventory_2, size: 18)),
@@ -96,19 +112,88 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
             ),
             Tab(text: 'Orders (${_orders.length})',
                 icon: const Icon(Icons.receipt_long, size: 18)),
+            Tab(text: 'Logs (${_logs.length})',
+                icon: const Icon(Icons.history, size: 18)),
           ],
         ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
+          : Column(
               children: [
-                _buildProductsTab(),
-                _buildInventoryTab(),
-                _buildOrdersTab(),
+                _buildMetricsSummary(
+                  totalProducts: totalProducts,
+                  totalRevenue: totalRevenue,
+                  lowStockCount: lowStockCount,
+                  outOfStockCount: outOfStockCount,
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildProductsTab(),
+                      _buildInventoryTab(),
+                      _buildOrdersTab(),
+                      _buildLogsTab(),
+                    ],
+                  ),
+                ),
               ],
             ),
+    );
+  }
+
+  Widget _buildMetricsSummary({
+    required int totalProducts,
+    required double totalRevenue,
+    required int lowStockCount,
+    required int outOfStockCount,
+  }) {
+    return Container(
+      color: AppColors.gray100,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Row(
+        children: [
+          _buildStatCard('Products', '$totalProducts', Icons.shopping_bag),
+          _buildStatCard('Revenue',
+              'GH\u20B5 ${totalRevenue.toStringAsFixed(2)}', Icons.payments),
+          _buildStatCard('Low Stock', '$lowStockCount', Icons.warning_amber,
+              valueColor: lowStockCount > 0 ? Colors.orange : null),
+          _buildStatCard('Out of Stock', '$outOfStockCount', Icons.remove_shopping_cart,
+              valueColor: outOfStockCount > 0 ? AppColors.red600 : null),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, IconData icon,
+      {Color? valueColor}) {
+    return Expanded(
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: AppColors.gray500),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: valueColor ?? AppColors.gray900,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(label,
+                  style: const TextStyle(fontSize: 10, color: AppColors.gray500)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -118,12 +203,50 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
     if (_products.isEmpty) {
       return const Center(child: Text('No products'));
     }
+    final filtered = _searchQuery.isEmpty
+        ? _products
+        : _products
+            .where((p) => (p['name'] as String)
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()))
+            .toList();
     return RefreshIndicator(
       onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _products.length,
-        itemBuilder: (_, i) => _buildProductTile(_products[i]),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search products...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              onChanged: (value) => setState(() => _searchQuery = value),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: filtered.length,
+              itemBuilder: (_, i) => _buildProductTile(filtered[i]),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -286,6 +409,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
             await ApiService.adjustStock(
               inventoryId: newInv['id'] as String,
               productId: product['id'] as String,
+              productName: product['name'] as String? ?? '',
               adjustment: result['adjustment'] as int,
               reason: result['reason'] as String,
             );
@@ -294,6 +418,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
           await ApiService.adjustStock(
             inventoryId: invRecord['id'] as String,
             productId: product['id'] as String,
+            productName: product['name'] as String? ?? '',
             adjustment: result['adjustment'] as int,
             reason: result['reason'] as String,
           );
@@ -506,6 +631,7 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
         await ApiService.adjustStock(
           inventoryId: inv['id'] as String,
           productId: inv['productId'] as String,
+          productName: inv['productName'] as String? ?? '',
           adjustment: result,
           reason: reason,
         );
@@ -619,6 +745,53 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
                         style: const TextStyle(fontSize: 12, color: AppColors.gray600)),
                 ],
               ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ============ LOGS TAB ============
+
+  Widget _buildLogsTab() {
+    if (_logs.isEmpty) {
+      return const Center(child: Text('No inventory logs'));
+    }
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: _logs.length,
+        itemBuilder: (_, i) {
+          final log = _logs[i];
+          final adjustment = log['adjustment'] as int;
+          final isPositive = adjustment > 0;
+          final adjustText = isPositive ? '+$adjustment' : '$adjustment';
+          final reason = log['reason'] as String;
+          final performedAt = log['performedAt'] as String;
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor:
+                    isPositive ? const Color(0xFFE8F5E9) : AppColors.red50,
+                child: Icon(
+                  isPositive ? Icons.add : Icons.remove,
+                  color:
+                      isPositive ? const Color(0xFF4CAF50) : AppColors.red600,
+                  size: 20,
+                ),
+              ),
+              title: Text(log['productName'] as String,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                '$adjustText  •  $reason\n$performedAt',
+                style:
+                    const TextStyle(fontSize: 12, color: AppColors.gray600),
+              ),
+              isThreeLine: true,
             ),
           );
         },

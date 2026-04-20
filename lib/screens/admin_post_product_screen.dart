@@ -19,6 +19,7 @@ class _AdminPostProductScreenState extends State<AdminPostProductScreen> {
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
   final _stockController = TextEditingController(text: '1');
+  final _thresholdController = TextEditingController(text: '5');
   String _category = 'Other';
   final List<File> _images = [];
   bool _isSubmitting = false;
@@ -47,6 +48,7 @@ class _AdminPostProductScreenState extends State<AdminPostProductScreen> {
     _descriptionController.dispose();
     _priceController.dispose();
     _stockController.dispose();
+    _thresholdController.dispose();
     super.dispose();
   }
 
@@ -102,6 +104,7 @@ class _AdminPostProductScreenState extends State<AdminPostProductScreen> {
         stock: int.parse(_stockController.text.trim()),
         category: _category,
         imageUrls: imageUrls,
+        lowStockThreshold: int.parse(_thresholdController.text.trim()),
       );
 
       if (mounted) {
@@ -229,6 +232,20 @@ class _AdminPostProductScreenState extends State<AdminPostProductScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _thresholdController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Low Stock Alert Threshold',
+                  prefixIcon: Icon(Icons.warning_amber_outlined),
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Required';
+                  if (int.tryParse(v) == null) return 'Invalid';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(
