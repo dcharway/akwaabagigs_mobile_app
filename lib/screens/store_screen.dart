@@ -392,20 +392,25 @@ class _StoreScreenState extends State<StoreScreen> {
                   ),
                 ),
               ),
-            // Low stock badge
-            if (stock > 0 && stock <= (product['lowStockThreshold'] ?? 5))
+            // Stock status badge: In Stock / Low Stock (sold-out is the overlay above)
+            if (stock > 0)
               Positioned(
                 top: 8,
                 left: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade700,
+                    color: stock <= (product['lowStockThreshold'] ?? 5)
+                        ? Colors.amber.shade700
+                        : const Color(0xFF2E7D32),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'Low Stock',
-                    style: TextStyle(
+                  child: Text(
+                    stock <= (product['lowStockThreshold'] ?? 5)
+                        ? 'Low Stock'
+                        : 'In Stock',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,

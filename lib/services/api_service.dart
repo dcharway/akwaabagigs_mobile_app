@@ -1790,17 +1790,24 @@ class ApiService {
     return user.get<bool>('isAdmin') ?? false;
   }
 
+  /// Fetch products. When [activeOnly] is true (public store view),
+  /// only products with status='active' are returned.
+  /// Admins can pass [statusFilter] to fetch a specific status
+  /// ('active', 'inactive', 'archived') or null for all.
   static Future<List<Map<String, dynamic>>> getProducts({
     String? category,
     String? search,
     bool activeOnly = true,
+    String? statusFilter,
   }) async {
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.productClass))
       ..orderByDescending('createdAt')
       ..setLimit(100);
 
-    if (activeOnly) {
+    if (statusFilter != null) {
+      query.whereEqualTo('status', statusFilter);
+    } else if (activeOnly) {
       query.whereEqualTo('status', 'active');
     }
     if (category != null) {
@@ -1907,6 +1914,73 @@ class ApiService {
           'Failed to delete product: ${response.error?.message}');
     }
   }
+
+  /// Apply the same field updates to multiple products in parallel.
+  /// Useful for bulk archive, activate, or deactivate operations.
+  static Future<void> bulkUpdateProducts(
+    List<String> ids,
+    Map<String, dynamic> updates,
+  ) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final saves = ids.map((id) {
+      final product = ParseObject(Back4AppConfig.productClass)
+        ..objectId = id;
+      updates.forEach((key, value) => product.set(key, value));
+      return product.save();
+    });
+
+    final results = await Future.wait(saves);
+    final failed = results.where((r) => !r.success).length;
+    if (failed > 0) {
+      throw Exception('$failed of ${ids.length} updates failed');
+    }
+  }
+
+  /// Duplicate an existing product. Copies name (with "(copy)" suffix),
+  /// description, price, category, threshold, and images. The new
+  /// product starts with stock=0 and status='inactive' so the admin
+  /// can finish setting it up before publishing.
+  static Future<Map<String, dynamic>> duplicateProduct(
+      String sourceId) async {
+    final user = await ParseUser.currentUser() as ParseUser?;
+    if (user == null) throw Exception('Not authenticated');
+    if (!(user.get<bool>('isAdmin') ?? false)) {
+      throw Exception('Admin access required');
+    }
+
+    final source = await getProduct(sourceId);
+    if (source == null) throw Exception('Source product not found');
+
+    final clone = ParseObject(Back4AppConfig.productClass)
+      ..set('name', '${source['name']} (copy)')
+      ..set('description', source['description'])
+      ..set('pricePesewas', source['pricePesewas'])
+      ..set('stock', 0)
+      ..set('lowStockThreshold', source['lowStockThreshold'] ?? 5)
+      ..set('totalSold', 0)
+      ..set('category', source['category'])
+      ..set('status', 'inactive')
+      ..set('sellerId', user.objectId)
+      ..set('sellerName', _fullName(user));
+
+    final images = source['images'];
+    if (images is List && images.isNotEmpty) {
+      clone.set('images', images);
+    }
+
+    final response = await clone.save();
+    if (response.success && response.result != null) {
+      return _parseObjectToProductMap(response.result as ParseObject);
+    }
+    throw Exception(
+        'Failed to duplicate product: ${response.error?.message}');
+  }
+
 
   static Future<Map<String, dynamic>> createStoreOrder({
     required String productId,
