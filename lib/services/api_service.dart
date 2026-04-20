@@ -1534,40 +1534,36 @@ class ApiService {
 
   // ============ MEDIA ASSETS (Sponsored Content) ============
 
-  /// Fetch active media assets that are currently within their
-  /// scheduled window (or have no schedule), sorted by priority.
+  /// Fetch active media assets sorted by priority. Schedule-window
+  /// filtering is applied client-side so assets with no schedule fall
+  /// through naturally (Parse SDK 9.x has no whereDoesNotExist helper).
   static Future<List<Map<String, dynamic>>> getActiveMediaAssets() async {
-    final now = DateTime.now().toIso8601String();
-
-    // Assets whose schedule window covers "now" (or that have no schedule)
-    final scheduledQuery = QueryBuilder<ParseObject>(
+    final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.mediaAssetClass))
       ..whereEqualTo('isActive', true)
-      ..whereLessThanOrEqualsTo('scheduleStart', now)
-      ..whereGreaterThanOrEqualTo('scheduleEnd', now)
       ..orderByDescending('priority')
       ..setLimit(20);
 
-    final unscheduledQuery = QueryBuilder<ParseObject>(
-        ParseObject(Back4AppConfig.mediaAssetClass))
-      ..whereEqualTo('isActive', true)
-      ..whereDoesNotExist('scheduleStart')
-      ..orderByDescending('priority')
-      ..setLimit(20);
+    final response = await query.query();
+    if (!response.success || response.results == null) return [];
 
-    final mainQuery = QueryBuilder.or(
-        ParseObject(Back4AppConfig.mediaAssetClass),
-        [scheduledQuery, unscheduledQuery])
-      ..orderByDescending('priority')
-      ..setLimit(20);
+    final now = DateTime.now();
+    final results = <Map<String, dynamic>>[];
+    for (final e in response.results!) {
+      final map = _parseObjectToMediaAssetMap(e as ParseObject);
+      final startStr = map['scheduleStart'] as String?;
+      final endStr = map['scheduleEnd'] as String?;
+      final start =
+          startStr != null ? DateTime.tryParse(startStr) : null;
+      final end = endStr != null ? DateTime.tryParse(endStr) : null;
 
-    final response = await mainQuery.query();
-    if (response.success && response.results != null) {
-      return response.results!
-          .map((e) => _parseObjectToMediaAssetMap(e as ParseObject))
-          .toList();
+      // Keep if no schedule OR "now" is inside the schedule window.
+      if ((start == null || !now.isBefore(start)) &&
+          (end == null || !now.isAfter(end))) {
+        results.add(map);
+      }
     }
-    return [];
+    return results;
   }
 
   static Map<String, dynamic> _parseObjectToMediaAssetMap(ParseObject obj) {
