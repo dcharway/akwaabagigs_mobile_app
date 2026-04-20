@@ -25,17 +25,31 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
   Subscription? _productSubscription;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _statusFilter = 'all';
+  bool _selectionMode = false;
+  final Set<String> _selectedIds = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_handleTabChange);
     _loadData();
     _subscribeLiveQuery();
   }
 
+  void _handleTabChange() {
+    if (_selectionMode) {
+      setState(() {
+        _selectionMode = false;
+        _selectedIds.clear();
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _searchController.dispose();
     _unsubscribeLiveQuery();
@@ -152,16 +166,102 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
     return Container(
       color: AppColors.gray100,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      child: Row(
+      child: Column(
         children: [
-          _buildStatCard('Products', '$totalProducts', Icons.shopping_bag),
-          _buildStatCard('Revenue',
-              'GH\u20B5 ${totalRevenue.toStringAsFixed(2)}', Icons.payments),
-          _buildStatCard('Low Stock', '$lowStockCount', Icons.warning_amber,
-              valueColor: lowStockCount > 0 ? Colors.orange : null),
-          _buildStatCard('Out of Stock', '$outOfStockCount', Icons.remove_shopping_cart,
-              valueColor: outOfStockCount > 0 ? AppColors.red600 : null),
+          Row(
+            children: [
+              _buildStatCard('Products', '$totalProducts', Icons.shopping_bag),
+              _buildStatCard('Revenue',
+                  'GH\u20B5 ${totalRevenue.toStringAsFixed(2)}', Icons.payments),
+              _buildStatCard('Low Stock', '$lowStockCount', Icons.warning_amber,
+                  valueColor: lowStockCount > 0 ? Colors.orange : null),
+              _buildStatCard('Out of Stock', '$outOfStockCount',
+                  Icons.remove_shopping_cart,
+                  valueColor: outOfStockCount > 0 ? AppColors.red600 : null),
+            ],
+          ),
+          if (_visibleTopSellers().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildTopSellersCard(_visibleTopSellers()),
+          ],
         ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _visibleTopSellers() {
+    final topSellers = [..._products]
+      ..sort((a, b) => ((b['totalSold'] ?? 0) as int)
+          .compareTo((a['totalSold'] ?? 0) as int));
+    return topSellers
+        .where((p) => ((p['totalSold'] ?? 0) as int) > 0)
+        .take(5)
+        .toList();
+  }
+
+  Widget _buildTopSellersCard(List<Map<String, dynamic>> topSellers) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.trending_up, size: 16, color: AppColors.red600),
+                SizedBox(width: 6),
+                Text('Top Sellers',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.gray900)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 46,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: topSellers.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final p = topSellers[i];
+                  final sold = (p['totalSold'] ?? 0) as int;
+                  return Container(
+                    width: 140,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.red50,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${i + 1}. ${p['name']}',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.gray900),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        Text(
+                          '$sold sold',
+                          style: const TextStyle(
+                              fontSize: 10, color: AppColors.red600),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -203,19 +303,41 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
     if (_products.isEmpty) {
       return const Center(child: Text('No products'));
     }
-    final filtered = _searchQuery.isEmpty
-        ? _products
-        : _products
-            .where((p) => (p['name'] as String)
-                .toLowerCase()
-                .contains(_searchQuery.toLowerCase()))
-            .toList();
+    Iterable<Map<String, dynamic>> result = _products;
+    if (_statusFilter != 'all') {
+      result = result.where((p) => p['status'] == _statusFilter);
+    }
+    if (_searchQuery.isNotEmpty) {
+      result = result.where((p) => (p['name'] as String)
+          .toLowerCase()
+          .contains(_searchQuery.toLowerCase()));
+    }
+    final filtered = result.toList();
     return RefreshIndicator(
       onRefresh: _loadData,
       child: Column(
         children: [
+          if (_selectionMode) _buildSelectionActionBar(),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: SizedBox(
+              height: 36,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _buildStatusChip('All', 'all'),
+                  const SizedBox(width: 6),
+                  _buildStatusChip('Active', 'active'),
+                  const SizedBox(width: 6),
+                  _buildStatusChip('Inactive', 'inactive'),
+                  const SizedBox(width: 6),
+                  _buildStatusChip('Archived', 'archived'),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -251,46 +373,233 @@ class _AdminManageStoreScreenState extends State<AdminManageStoreScreen>
     );
   }
 
+  Widget _buildStatusChip(String label, String value) {
+    final selected = _statusFilter == value;
+    return FilterChip(
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      selected: selected,
+      onSelected: (_) => setState(() => _statusFilter = value),
+      selectedColor: AppColors.red50,
+      checkmarkColor: AppColors.red600,
+      labelStyle: TextStyle(
+        color: selected ? AppColors.red600 : AppColors.gray700,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+      ),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
+  Widget _buildSelectionActionBar() {
+    return Container(
+      color: AppColors.red50,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Text('${_selectedIds.length} selected',
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600, color: AppColors.red600)),
+          const Spacer(),
+          TextButton.icon(
+            onPressed:
+                _selectedIds.isEmpty ? null : () => _bulkSetStatus('archived'),
+            icon: const Icon(Icons.archive, size: 18),
+            label: const Text('Archive'),
+          ),
+          TextButton.icon(
+            onPressed:
+                _selectedIds.isEmpty ? null : () => _bulkSetStatus('active'),
+            icon: const Icon(Icons.check_circle, size: 18),
+            label: const Text('Activate'),
+          ),
+          TextButton.icon(
+            onPressed: _selectedIds.isEmpty ? null : _bulkDelete,
+            icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+            label:
+                const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+          TextButton(
+            onPressed: () => setState(() {
+              _selectionMode = false;
+              _selectedIds.clear();
+            }),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _bulkSetStatus(String status) async {
+    try {
+      await ApiService.bulkUpdateProducts(
+          _selectedIds.toList(), {'status': status});
+      if (mounted) {
+        AppNotifier.success(
+            context, '${_selectedIds.length} products updated');
+        setState(() {
+          _selectionMode = false;
+          _selectedIds.clear();
+        });
+        _loadData();
+      }
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  Future<void> _bulkDelete() async {
+    final count = _selectedIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Products'),
+        content: Text(
+            'Delete $count selected product${count == 1 ? '' : 's'}? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await Future.wait(
+          _selectedIds.map((id) => ApiService.deleteProduct(id)));
+      if (mounted) {
+        AppNotifier.success(context, '$count products deleted');
+        setState(() {
+          _selectionMode = false;
+          _selectedIds.clear();
+        });
+        _loadData();
+      }
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
   Widget _buildProductTile(Map<String, dynamic> p) {
     final priceGhs = (p['pricePesewas'] as int) / 100;
     final isActive = p['status'] == 'active';
+    final id = p['id'] as String;
+    final isSelected = _selectedIds.contains(id);
+
+    Widget leading;
+    if (_selectionMode) {
+      leading = Checkbox(
+        value: isSelected,
+        onChanged: (checked) {
+          setState(() {
+            if (checked == true) {
+              _selectedIds.add(id);
+            } else {
+              _selectedIds.remove(id);
+            }
+          });
+        },
+      );
+    } else {
+      leading = Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.red50 : AppColors.gray100,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(Icons.shopping_bag,
+            color: isActive ? AppColors.red600 : AppColors.gray400),
+      );
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
+      color: isSelected ? AppColors.red50 : null,
       child: ListTile(
-        leading: Container(
-          width: 48, height: 48,
-          decoration: BoxDecoration(
-            color: isActive ? AppColors.red50 : AppColors.gray100,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(Icons.shopping_bag,
-              color: isActive ? AppColors.red600 : AppColors.gray400),
-        ),
+        onLongPress: () {
+          setState(() {
+            _selectionMode = true;
+            _selectedIds.add(id);
+          });
+        },
+        onTap: _selectionMode
+            ? () {
+                setState(() {
+                  if (isSelected) {
+                    _selectedIds.remove(id);
+                  } else {
+                    _selectedIds.add(id);
+                  }
+                });
+              }
+            : null,
+        leading: leading,
         title: Text(p['name'] as String,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
             'GH₵ ${priceGhs.toStringAsFixed(0)} • Stock: ${p['stock']}'),
-        trailing: PopupMenuButton<String>(
-          onSelected: (v) {
-            if (v == 'price') _showEditPrice(p);
-            if (v == 'stock') _showEditStock(p);
-            if (v == 'toggle') _toggleProductStatus(p);
-            if (v == 'delete') _confirmDelete(p);
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'price', child: Text('Edit Price')),
-            const PopupMenuItem(value: 'stock', child: Text('Edit Stock')),
-            PopupMenuItem(
-                value: 'toggle',
-                child: Text(isActive ? 'Deactivate' : 'Activate')),
-            const PopupMenuItem(
-                value: 'delete',
-                child: Text('Delete', style: TextStyle(color: Colors.red))),
-          ],
-        ),
+        trailing: _selectionMode
+            ? null
+            : PopupMenuButton<String>(
+                onSelected: (v) {
+                  if (v == 'price') _showEditPrice(p);
+                  if (v == 'stock') _showEditStock(p);
+                  if (v == 'toggle') _toggleProductStatus(p);
+                  if (v == 'duplicate') _duplicateProduct(p);
+                  if (v == 'archive') _archiveProduct(p);
+                  if (v == 'delete') _confirmDelete(p);
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                      value: 'price', child: Text('Edit Price')),
+                  const PopupMenuItem(
+                      value: 'stock', child: Text('Edit Stock')),
+                  PopupMenuItem(
+                      value: 'toggle',
+                      child: Text(isActive ? 'Deactivate' : 'Activate')),
+                  const PopupMenuItem(
+                      value: 'duplicate', child: Text('Duplicate')),
+                  const PopupMenuItem(
+                      value: 'archive', child: Text('Archive')),
+                  const PopupMenuItem(
+                      value: 'delete',
+                      child:
+                          Text('Delete', style: TextStyle(color: Colors.red))),
+                ],
+              ),
       ),
     );
+  }
+
+  Future<void> _duplicateProduct(Map<String, dynamic> product) async {
+    try {
+      await ApiService.duplicateProduct(product['id'] as String);
+      if (mounted) {
+        AppNotifier.success(context, 'Product duplicated');
+        _loadData();
+      }
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  Future<void> _archiveProduct(Map<String, dynamic> product) async {
+    try {
+      await ApiService.updateProduct(
+          product['id'] as String, {'status': 'archived'});
+      if (mounted) {
+        AppNotifier.success(context, 'Product archived');
+        _loadData();
+      }
+    } catch (e) {
+      _showError(e);
+    }
   }
 
   void _showEditPrice(Map<String, dynamic> product) async {
