@@ -44,6 +44,12 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
   Future<void> _loadAssets() async {
     try {
       final raw = await ApiService.getActiveMediaAssets();
+      debugPrint('[Carousel] loaded ${raw.length} assets');
+      for (final m in raw) {
+        debugPrint('[Carousel]  id=${m['id']} type=${m['mediaType']} '
+            'url=${(m['fileUrl'] as String?)?.isNotEmpty == true ? 'YES' : 'EMPTY'} '
+            'active=${m['isActive']}');
+      }
       if (mounted) {
         setState(() {
           _assets = raw.map((m) => MediaAsset.fromJson(m)).toList();
@@ -55,7 +61,8 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
           _startWatchTimer();
         }
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Carousel] load error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }

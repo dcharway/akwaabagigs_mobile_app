@@ -1635,18 +1635,40 @@ class ApiService {
   }
 
   static Map<String, dynamic> _parseObjectToMediaAssetMap(ParseObject obj) {
+    // Resolve file URL: try string field first, then ParseFile, then raw map
     String? fileUrl = obj.get<String>('fileUrl');
-    if ((fileUrl == null || fileUrl.isEmpty) && obj.get('file') != null) {
-      final parseFile = obj.get<ParseFile>('file');
-      fileUrl = parseFile?.url;
+    if (fileUrl == null || fileUrl.isEmpty) {
+      try {
+        final parseFile = obj.get<ParseFileBase>('file');
+        fileUrl = parseFile?.url;
+      } catch (_) {}
+      if (fileUrl == null || fileUrl.isEmpty) {
+        final rawFile = obj.get('file');
+        if (rawFile is Map) {
+          fileUrl = rawFile['url'] as String?;
+        }
+      }
     }
 
     String? thumbUrl = obj.get<String>('thumbnailUrl');
-    if ((thumbUrl == null || thumbUrl.isEmpty) &&
-        obj.get('thumbnail') != null) {
-      final thumbFile = obj.get<ParseFile>('thumbnail');
-      thumbUrl = thumbFile?.url;
+    if (thumbUrl == null || thumbUrl.isEmpty) {
+      try {
+        final thumbFile = obj.get<ParseFileBase>('thumbnail');
+        thumbUrl = thumbFile?.url;
+      } catch (_) {}
+      if (thumbUrl == null || thumbUrl.isEmpty) {
+        final rawThumb = obj.get('thumbnail');
+        if (rawThumb is Map) {
+          thumbUrl = rawThumb['url'] as String?;
+        }
+      }
     }
+
+    // scheduleStart/End might be stored as Date (not String) in Back4App
+    String? scheduleStart = obj.get<String>('scheduleStart');
+    scheduleStart ??= obj.get<DateTime>('scheduleStart')?.toIso8601String();
+    String? scheduleEnd = obj.get<String>('scheduleEnd');
+    scheduleEnd ??= obj.get<DateTime>('scheduleEnd')?.toIso8601String();
 
     return {
       'id': obj.objectId ?? '',
@@ -1660,15 +1682,14 @@ class ApiService {
       'isActive': obj.get<bool>('isActive') ?? true,
       'uploader': obj.get<String>('uploader'),
       'createdAt': obj.createdAt?.toIso8601String() ?? '',
-      // Sponsored fields
       'isSponsored': obj.get<bool>('isSponsored') ?? false,
       'advertiserName': obj.get<String>('advertiserName'),
       'ctaLabel': obj.get<String>('ctaLabel'),
       'ctaUrl': obj.get<String>('ctaUrl'),
       'campaignId': obj.get<String>('campaignId'),
       'priority': obj.get<int>('priority') ?? 0,
-      'scheduleStart': obj.get<String>('scheduleStart'),
-      'scheduleEnd': obj.get<String>('scheduleEnd'),
+      'scheduleStart': scheduleStart,
+      'scheduleEnd': scheduleEnd,
     };
   }
 
