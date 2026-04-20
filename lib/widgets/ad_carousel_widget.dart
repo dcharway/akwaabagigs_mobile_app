@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,29 +15,51 @@ class AdCarouselWidget extends StatefulWidget {
   State<AdCarouselWidget> createState() => _AdCarouselWidgetState();
 }
 
-class _AdCarouselWidgetState extends State<AdCarouselWidget> {
+class _AdCarouselWidgetState extends State<AdCarouselWidget>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
   List<MediaAsset> _assets = [];
   bool _isLoading = true;
   final Map<int, VideoPlayerController> _videoControllers = {};
   final Set<String> _impressionTracked = {};
+  final Set<String> _completionTracked = {};
+  final CarouselSliderController _carouselController =
+      CarouselSliderController();
   Timer? _watchTimer;
   int _watchSeconds = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadAssets();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _flushWatchTime();
     _watchTimer?.cancel();
     for (final c in _videoControllers.values) {
+      c.removeListener(() {});
       c.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _videoControllers[_currentIndex]?.pause();
+      _flushWatchTime();
+    } else if (state == AppLifecycleState.resumed) {
+      final asset =
+          _currentIndex < _assets.length ? _assets[_currentIndex] : null;
+      if (asset != null && asset.isVideo) {
+        _videoControllers[_currentIndex]?.play();
+        _startWatchTimer();
+      }
+    }
   }
 
   Future<void> _loadAssets() async {
@@ -83,19 +104,10 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
           VideoPlayerController.networkUrl(Uri.parse(url));
       _videoControllers[index] = controller;
       await controller.initialize();
-      controller.setLooping(true);
+      controller.setLooping(false);
       controller.setVolume(0);
 
-      controller.addListener(() {
-        if (!controller.value.isPlaying) return;
-        final pos = controller.value.position;
-        final dur = controller.value.duration;
-        if (dur.inSeconds > 0 &&
-            pos.inSeconds >= dur.inSeconds &&
-            index < _assets.length) {
-          ApiService.trackMediaCompletion(_assets[index].id);
-        }
-      });
+      controller.addListener(() => _onVideoTick(controller, index));
 
       if (index == _currentIndex && mounted) {
         controller.play();
@@ -104,9 +116,36 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
     } catch (_) {}
   }
 
+  void _onVideoTick(VideoPlayerController controller, int index) {
+    if (!mounted) return;
+    final pos = controller.value.position;
+    final dur = controller.value.duration;
+    if (dur.inMilliseconds <= 0) return;
+
+    // Track completion once per session per asset
+    if (pos.inMilliseconds >= dur.inMilliseconds - 200 &&
+        index < _assets.length) {
+      final id = _assets[index].id;
+      if (_completionTracked.add(id)) {
+        ApiService.trackMediaCompletion(id);
+      }
+      // Auto-advance to next card after video finishes
+      if (_assets.length > 1 && index == _currentIndex) {
+        final next = (index + 1) % _assets.length;
+        _carouselController.animateToPage(next);
+      }
+    }
+
+    // Trigger rebuild for duration display
+    if (controller.value.isPlaying) {
+      setState(() {});
+    }
+  }
+
   void _onPageChanged(int index) {
     _flushWatchTime();
     _videoControllers[_currentIndex]?.pause();
+    _videoControllers[_currentIndex]?.seekTo(Duration.zero);
     setState(() => _currentIndex = index);
 
     if (index < _assets.length) {
@@ -119,6 +158,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
       if (index + 1 < _assets.length && _assets[index + 1].isVideo) {
         _initVideo(index + 1);
       }
+      _startWatchTimer();
     }
   }
 
@@ -197,10 +237,11 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
             )
           else
             CarouselSlider(
+              carouselController: _carouselController,
               options: CarouselOptions(
                 height: 320,
                 viewportFraction: 1.0,
-                autoPlay: !hasAssets || !_assets.any((a) => a.isVideo),
+                autoPlay: hasAssets && !_assets.any((a) => a.isVideo),
                 autoPlayInterval: const Duration(seconds: 6),
                 enlargeCenterPage: false,
                 onPageChanged: (i, _) => _onPageChanged(i),
@@ -210,20 +251,19 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
                 return _buildDefaultCard(_defaultCards[i]);
               }),
             ),
-          const SizedBox(height: 12),
-          Center(
-            child: AnimatedSmoothIndicator(
-              activeIndex: _currentIndex,
-              count: itemCount,
-              effect: const ExpandingDotsEffect(
-                activeDotColor: AppColors.amber600,
-                dotColor: AppColors.gray400,
-                dotHeight: 8,
-                dotWidth: 8,
-                expansionFactor: 3,
+          const SizedBox(height: 10),
+          // Ad position counter: "1 of 3"
+          if (hasAssets && _assets.length > 1)
+            Center(
+              child: Text(
+                '${_currentIndex + 1} of ${_assets.length}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.gray500,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -301,7 +341,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
   }
 
   // ================================================================
-  //  SHARED CARD SHELL  (overlay: gradient, badge, title, CTA)
+  //  SHARED CARD SHELL
   // ================================================================
 
   Widget _cardShell({
@@ -329,10 +369,9 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // ---- media layer ----
             background,
 
-            // ---- bottom gradient ----
+            // Bottom gradient
             Positioned(
               bottom: 0,
               left: 0,
@@ -352,7 +391,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
               ),
             ),
 
-            // ---- play button ----
+            // Play button
             if (showPlayButton)
               Center(
                 child: Container(
@@ -373,67 +412,91 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
                 ),
               ),
 
-            // ---- sponsored badge ----
-            if (asset.isSponsored)
-              Positioned(
-                top: 10,
-                left: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.campaign,
-                          color: AppColors.amber500, size: 12),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Sponsored${asset.advertiserName != null ? ' • ${asset.advertiserName}' : ''}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+            // ---- Top badges row: Sponsored + duration ----
+            Positioned(
+              top: 10,
+              left: 10,
+              right: 10,
+              child: Row(
+                children: [
+                  if (asset.isSponsored)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.campaign,
+                              color: AppColors.amber500, size: 12),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Sponsored${asset.advertiserName != null ? ' • ${asset.advertiserName}' : ''}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const Spacer(),
+                  // Mute toggle
+                  if (videoController != null)
+                    GestureDetector(
+                      onTap: () {
+                        videoController.setVolume(
+                            videoController.value.volume == 0
+                                ? 1.0
+                                : 0.0);
+                        setState(() {});
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          videoController.value.volume == 0
+                              ? Icons.volume_off
+                              : Icons.volume_up,
                           color: Colors.white,
-                          letterSpacing: 0.3,
+                          size: 16,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // ---- mute toggle (videos only) ----
-            if (videoController != null)
-              Positioned(
-                top: 10,
-                right: 10,
-                child: GestureDetector(
-                  onTap: () {
-                    videoController.setVolume(
-                        videoController.value.volume == 0 ? 1.0 : 0.0);
-                    setState(() {});
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
-                      shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      videoController.value.volume == 0
-                          ? Icons.volume_off
-                          : Icons.volume_up,
-                      color: Colors.white,
-                      size: 16,
+                  // Duration badge for videos
+                  if (isVideoInit) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        _formatDuration(
+                            videoController!.value.duration),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  ],
+                ],
               ),
+            ),
 
-            // ---- title + description + CTA ----
+            // ---- Title + description + CTA ----
             Positioned(
               bottom: 14,
               left: 14,
@@ -490,7 +553,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
               ),
             ),
 
-            // ---- video progress bar ----
+            // Video progress bar
             if (isVideoInit)
               Positioned(
                 bottom: 0,
@@ -513,8 +576,14 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget> {
     );
   }
 
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
   // ================================================================
-  //  FALLBACK CARDS  (when no active campaigns)
+  //  FALLBACK CARDS
   // ================================================================
 
   static const List<Map<String, String>> _defaultCards = [
