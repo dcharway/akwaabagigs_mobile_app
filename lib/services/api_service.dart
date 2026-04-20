@@ -1532,15 +1532,36 @@ class ApiService {
     };
   }
 
-  // ============ MEDIA ASSETS ============
+  // ============ MEDIA ASSETS (Sponsored Content) ============
 
+  /// Fetch active media assets that are currently within their
+  /// scheduled window (or have no schedule), sorted by priority.
   static Future<List<Map<String, dynamic>>> getActiveMediaAssets() async {
-    final query = QueryBuilder<ParseObject>(
+    final now = DateTime.now().toIso8601String();
+
+    // Assets whose schedule window covers "now" (or that have no schedule)
+    final scheduledQuery = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.mediaAssetClass))
       ..whereEqualTo('isActive', true)
-      ..orderByDescending('createdAt');
+      ..whereLessThanOrEqualsTo('scheduleStart', now)
+      ..whereGreaterThanOrEqualTo('scheduleEnd', now)
+      ..orderByDescending('priority')
+      ..setLimit(20);
 
-    final response = await query.query();
+    final unscheduledQuery = QueryBuilder<ParseObject>(
+        ParseObject(Back4AppConfig.mediaAssetClass))
+      ..whereEqualTo('isActive', true)
+      ..whereDoesNotExist('scheduleStart')
+      ..orderByDescending('priority')
+      ..setLimit(20);
+
+    final mainQuery = QueryBuilder.or(
+        ParseObject(Back4AppConfig.mediaAssetClass),
+        [scheduledQuery, unscheduledQuery])
+      ..orderByDescending('priority')
+      ..setLimit(20);
+
+    final response = await mainQuery.query();
     if (response.success && response.results != null) {
       return response.results!
           .map((e) => _parseObjectToMediaAssetMap(e as ParseObject))
@@ -1551,23 +1572,71 @@ class ApiService {
 
   static Map<String, dynamic> _parseObjectToMediaAssetMap(ParseObject obj) {
     String? fileUrl = obj.get<String>('fileUrl');
-
     if ((fileUrl == null || fileUrl.isEmpty) && obj.get('file') != null) {
       final parseFile = obj.get<ParseFile>('file');
       fileUrl = parseFile?.url;
     }
 
+    String? thumbUrl = obj.get<String>('thumbnailUrl');
+    if ((thumbUrl == null || thumbUrl.isEmpty) &&
+        obj.get('thumbnail') != null) {
+      final thumbFile = obj.get<ParseFile>('thumbnail');
+      thumbUrl = thumbFile?.url;
+    }
+
     return {
       'id': obj.objectId ?? '',
       'title': obj.get<String>('title') ?? '',
+      'description': obj.get<String>('description'),
       'fileUrl': fileUrl ?? '',
+      'thumbnailUrl': thumbUrl,
       'mediaType': obj.get<String>('mediaType') ?? 'image',
       'mimeType': obj.get<String>('mimeType'),
       'sizeBytes': obj.get<int>('sizeBytes'),
       'isActive': obj.get<bool>('isActive') ?? true,
       'uploader': obj.get<String>('uploader'),
       'createdAt': obj.createdAt?.toIso8601String() ?? '',
+      // Sponsored fields
+      'isSponsored': obj.get<bool>('isSponsored') ?? false,
+      'advertiserName': obj.get<String>('advertiserName'),
+      'ctaLabel': obj.get<String>('ctaLabel'),
+      'ctaUrl': obj.get<String>('ctaUrl'),
+      'campaignId': obj.get<String>('campaignId'),
+      'priority': obj.get<int>('priority') ?? 0,
+      'scheduleStart': obj.get<String>('scheduleStart'),
+      'scheduleEnd': obj.get<String>('scheduleEnd'),
     };
+  }
+
+  // ---- Ad analytics tracking ----
+
+  static Future<void> trackMediaImpression(String assetId) async {
+    final obj = ParseObject(Back4AppConfig.mediaAssetClass)
+      ..objectId = assetId;
+    obj.setIncrement('impressions', 1);
+    obj.save();
+  }
+
+  static Future<void> trackMediaClick(String assetId) async {
+    final obj = ParseObject(Back4AppConfig.mediaAssetClass)
+      ..objectId = assetId;
+    obj.setIncrement('clicks', 1);
+    obj.save();
+  }
+
+  static Future<void> trackMediaWatchTime(
+      String assetId, int seconds) async {
+    final obj = ParseObject(Back4AppConfig.mediaAssetClass)
+      ..objectId = assetId;
+    obj.setIncrement('totalWatchSeconds', seconds);
+    obj.save();
+  }
+
+  static Future<void> trackMediaCompletion(String assetId) async {
+    final obj = ParseObject(Back4AppConfig.mediaAssetClass)
+      ..objectId = assetId;
+    obj.setIncrement('completions', 1);
+    obj.save();
   }
 
   // ============ KYC (Smile ID) ============
