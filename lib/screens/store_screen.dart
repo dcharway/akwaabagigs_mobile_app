@@ -6,6 +6,7 @@ import '../config/back4app_config.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
+import '../utils/constants.dart';
 import 'product_detail_screen.dart';
 import 'admin_post_product_screen.dart';
 import 'admin_manage_store_screen.dart';
@@ -27,15 +28,7 @@ class _StoreScreenState extends State<StoreScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  static const List<String> _categories = [
-    'Fashion',
-    'Electronics',
-    'Food & Drinks',
-    'Health & Beauty',
-    'Home & Garden',
-    'Arts & Crafts',
-    'Other',
-  ];
+  static const List<String> _categories = AppConstants.storeCategories;
 
   @override
   void initState() {
@@ -79,6 +72,7 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   Future<void> _loadProducts() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       _products = await ApiService.getProducts(

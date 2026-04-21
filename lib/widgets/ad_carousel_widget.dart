@@ -21,12 +21,14 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   List<MediaAsset> _assets = [];
   bool _isLoading = true;
   final Map<int, VideoPlayerController> _videoControllers = {};
+  final Map<int, VoidCallback> _videoListeners = {};
   final Set<String> _impressionTracked = {};
   final Set<String> _completionTracked = {};
   final CarouselSliderController _carouselController =
       CarouselSliderController();
   Timer? _watchTimer;
   int _watchSeconds = 0;
+  static const _maxConcurrentVideos = 3;
 
   @override
   void initState() {
@@ -40,9 +42,10 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     WidgetsBinding.instance.removeObserver(this);
     _flushWatchTime();
     _watchTimer?.cancel();
-    for (final c in _videoControllers.values) {
-      c.removeListener(() {});
-      c.dispose();
+    for (final entry in _videoControllers.entries) {
+      final listener = _videoListeners[entry.key];
+      if (listener != null) entry.value.removeListener(listener);
+      entry.value.dispose();
     }
     super.dispose();
   }
@@ -65,12 +68,6 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   Future<void> _loadAssets() async {
     try {
       final raw = await ApiService.getActiveMediaAssets();
-      debugPrint('[Carousel] loaded ${raw.length} assets');
-      for (final m in raw) {
-        debugPrint('[Carousel]  id=${m['id']} type=${m['mediaType']} '
-            'url=${(m['fileUrl'] as String?)?.isNotEmpty == true ? 'YES' : 'EMPTY'} '
-            'active=${m['isActive']}');
-      }
       if (mounted) {
         setState(() {
           _assets = raw.map((m) => MediaAsset.fromJson(m)).toList();
@@ -82,8 +79,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
           _startWatchTimer();
         }
       }
-    } catch (e) {
-      debugPrint('[Carousel] load error: $e');
+    } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -99,6 +95,10 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     final url = _assets[index].fileUrl;
     if (url == null || url.isEmpty) return;
 
+    // Evict stale controllers that are far from the viewport to cap
+    // memory at _maxConcurrentVideos active decoders.
+    _evictStaleControllers(index);
+
     try {
       final controller =
           VideoPlayerController.networkUrl(Uri.parse(url));
@@ -107,38 +107,53 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
       controller.setLooping(false);
       controller.setVolume(0);
 
-      controller.addListener(() => _onVideoTick(controller, index));
+      void listener() => _onVideoTick(controller, index);
+      _videoListeners[index] = listener;
+      controller.addListener(listener);
 
       if (index == _currentIndex && mounted) {
         controller.play();
-        setState(() {});
+        if (mounted) setState(() {});
       }
     } catch (_) {}
   }
 
+  void _evictStaleControllers(int keepNear) {
+    if (_videoControllers.length < _maxConcurrentVideos) return;
+    final sortedKeys = _videoControllers.keys.toList()
+      ..sort((a, b) =>
+          (a - keepNear).abs().compareTo((b - keepNear).abs()));
+    while (_videoControllers.length >= _maxConcurrentVideos) {
+      final farthest = sortedKeys.removeLast();
+      _disposeController(farthest);
+    }
+  }
+
+  void _disposeController(int index) {
+    final c = _videoControllers.remove(index);
+    final l = _videoListeners.remove(index);
+    if (c != null) {
+      if (l != null) c.removeListener(l);
+      c.dispose();
+    }
+  }
+
   void _onVideoTick(VideoPlayerController controller, int index) {
     if (!mounted) return;
-    final pos = controller.value.position;
     final dur = controller.value.duration;
     if (dur.inMilliseconds <= 0) return;
+    final pos = controller.value.position;
 
-    // Track completion once per session per asset
     if (pos.inMilliseconds >= dur.inMilliseconds - 200 &&
         index < _assets.length) {
       final id = _assets[index].id;
       if (_completionTracked.add(id)) {
         ApiService.trackMediaCompletion(id);
       }
-      // Auto-advance to next card after video finishes
       if (_assets.length > 1 && index == _currentIndex) {
         final next = (index + 1) % _assets.length;
         _carouselController.animateToPage(next);
       }
-    }
-
-    // Trigger rebuild for duration display
-    if (controller.value.isPlaying) {
-      setState(() {});
     }
   }
 

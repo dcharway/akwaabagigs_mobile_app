@@ -61,20 +61,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-    final notifProvider = context.watch<NotificationsProvider>();
-
     return Scaffold(
       key: _scaffoldKey,
-      drawer: _buildDrawer(context, authProvider),
+      drawer: Consumer<AuthProvider>(
+        builder: (ctx, authProvider, _) =>
+            _buildDrawer(ctx, authProvider),
+      ),
       body: IndexedStack(
         index: _currentIndex,
         children: [
           _buildHomeLanding(),
           _buildGigsTab(),
           const StoreScreen(),
-          // Chat tab now also hosts notifications (Alerts has been
-          // folded in). See ChatListScreen for the merged UI.
           ChatListScreen(key: _chatListKey),
           const ProfileScreen(),
         ],
@@ -84,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: AppColors.amber600,
               foregroundColor: Colors.white,
               onPressed: () async {
-                if (!authProvider.isAuthenticated) {
+                if (!context.read<AuthProvider>().isAuthenticated) {
                   final loggedIn = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(
@@ -108,7 +106,10 @@ class _HomeScreenState extends State<HomeScreen> {
               label: const Text('Post Gig'),
             )
           : null,
-      bottomNavigationBar: _buildBottomNav(notifProvider),
+      bottomNavigationBar: Consumer<NotificationsProvider>(
+        builder: (_, notifProvider, __) =>
+            _buildBottomNav(notifProvider),
+      ),
     );
   }
 
