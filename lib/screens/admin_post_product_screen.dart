@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../utils/app_notifier.dart';
 import '../utils/colors.dart';
+import '../utils/constants.dart';
 
 class AdminPostProductScreen extends StatefulWidget {
   const AdminPostProductScreen({super.key});
@@ -26,15 +27,7 @@ class _AdminPostProductScreenState extends State<AdminPostProductScreen> {
   bool _isAdmin = false;
   bool _isChecking = true;
 
-  static const List<String> _categories = [
-    'Fashion',
-    'Electronics',
-    'Food & Drinks',
-    'Health & Beauty',
-    'Home & Garden',
-    'Arts & Crafts',
-    'Other',
-  ];
+  static const List<String> _categories = AppConstants.storeCategories;
 
   @override
   void initState() {
