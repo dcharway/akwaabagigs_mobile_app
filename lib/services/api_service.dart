@@ -1467,21 +1467,31 @@ class ApiService {
 
   /// Get currently scheduled ads that should be playing right now
   static Future<List<Map<String, dynamic>>> getActiveVideoAds() async {
-    final now = DateTime.now().toIso8601String();
     final query = QueryBuilder<ParseObject>(
         ParseObject(Back4AppConfig.videoAdClass))
       ..whereEqualTo('status', 'active')
-      ..whereLessThan('scheduleStart', now)
-      ..whereGreaterThan('scheduleEnd', now)
-      ..orderByAscending('sortOrder');
+      ..orderByAscending('sortOrder')
+      ..setLimit(20);
 
     final response = await query.query();
-    if (response.success && response.results != null) {
-      return response.results!
-          .map((e) => _parseObjectToVideoAdMap(e as ParseObject))
-          .toList();
+    if (!response.success || response.results == null) return [];
+
+    final now = DateTime.now();
+    final results = <Map<String, dynamic>>[];
+    for (final e in response.results!) {
+      final map = _parseObjectToVideoAdMap(e as ParseObject);
+      final startStr = map['scheduleStart'] as String?;
+      final endStr = map['scheduleEnd'] as String?;
+      final start =
+          (startStr != null && startStr.isNotEmpty) ? DateTime.tryParse(startStr) : null;
+      final end =
+          (endStr != null && endStr.isNotEmpty) ? DateTime.tryParse(endStr) : null;
+      if ((start == null || !now.isBefore(start)) &&
+          (end == null || !now.isAfter(end))) {
+        results.add(map);
+      }
     }
-    return [];
+    return results;
   }
 
   static Future<List<Map<String, dynamic>>> getAllVideoAds() async {
@@ -1579,22 +1589,67 @@ class ApiService {
     await ad.save();
   }
 
+  static Future<void> trackAdWatchTime(String adId, int seconds) async {
+    final ad = ParseObject(Back4AppConfig.videoAdClass)..objectId = adId;
+    ad.setIncrement('watchTimeSeconds', seconds);
+    ad.save();
+  }
+
+  static Future<void> trackAdCompletion(String adId) async {
+    final ad = ParseObject(Back4AppConfig.videoAdClass)..objectId = adId;
+    ad.setIncrement('completions', 1);
+    ad.save();
+  }
+
   static Map<String, dynamic> _parseObjectToVideoAdMap(ParseObject obj) {
+    String? videoUrl = obj.get<String>('videoUrl');
+    if ((videoUrl == null || videoUrl.isEmpty)) {
+      try {
+        final parseFile = obj.get<ParseFileBase>('file');
+        videoUrl = parseFile?.url;
+      } catch (_) {}
+      if (videoUrl == null || videoUrl.isEmpty) {
+        final rawFile = obj.get('file');
+        if (rawFile is Map) videoUrl = rawFile['url'] as String?;
+      }
+    }
+
+    String? thumbUrl = obj.get<String>('thumbnailUrl');
+    if (thumbUrl == null || thumbUrl.isEmpty) {
+      try {
+        final thumbFile = obj.get<ParseFileBase>('thumbnail');
+        thumbUrl = thumbFile?.url;
+      } catch (_) {}
+      if (thumbUrl == null || thumbUrl.isEmpty) {
+        final rawThumb = obj.get('thumbnail');
+        if (rawThumb is Map) thumbUrl = rawThumb['url'] as String?;
+      }
+    }
+
+    String? scheduleStart = obj.get<String>('scheduleStart');
+    scheduleStart ??= obj.get<DateTime>('scheduleStart')?.toIso8601String();
+    String? scheduleEnd = obj.get<String>('scheduleEnd');
+    scheduleEnd ??= obj.get<DateTime>('scheduleEnd')?.toIso8601String();
+
     return {
       'id': obj.objectId ?? '',
       'title': obj.get<String>('title') ?? '',
       'description': obj.get<String>('description') ?? '',
-      'videoUrl': obj.get<String>('videoUrl') ?? '',
-      'thumbnailUrl': obj.get<String>('thumbnailUrl'),
+      'videoUrl': videoUrl ?? '',
+      'thumbnailUrl': thumbUrl,
       'advertiserName': obj.get<String>('advertiserName') ?? '',
-      'scheduleStart': obj.get<String>('scheduleStart') ?? '',
-      'scheduleEnd': obj.get<String>('scheduleEnd') ?? '',
+      'ctaLabel': obj.get<String>('ctaLabel'),
+      'ctaUrl': obj.get<String>('ctaUrl'),
+      'scheduleStart': scheduleStart ?? '',
+      'scheduleEnd': scheduleEnd ?? '',
       'pricePesewas': obj.get<int>('pricePesewas') ?? 0,
       'pricingTier': obj.get<String>('pricingTier') ?? 'daily',
       'sortOrder': obj.get<int>('sortOrder') ?? 0,
       'status': obj.get<String>('status') ?? 'active',
       'impressions': obj.get<int>('impressions') ?? 0,
       'clicks': obj.get<int>('clicks') ?? 0,
+      'watchTimeSeconds': obj.get<int>('watchTimeSeconds') ?? 0,
+      'completions': obj.get<int>('completions') ?? 0,
       'createdBy': obj.get<String>('createdBy') ?? '',
       'createdAt': obj.createdAt?.toIso8601String() ?? '',
     };
