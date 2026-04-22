@@ -20,7 +20,6 @@ import 'my_gigs_screen.dart';
 import 'my_applications_screen.dart';
 import 'saved_gigs_screen.dart';
 import 'store_screen.dart';
-import 'admin_video_ads_screen.dart';
 import 'customer_support_screen.dart';
 import 'login_screen.dart';
 
@@ -212,23 +211,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
-              if (authProvider.user?.isAdmin == true) ...[
-                const Divider(color: AppColors.gray200),
-                _drawerItem(
-                  icon: Icons.videocam,
-                  label: 'Video Ads Manager',
-                  color: AppColors.red600,
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              const AdminVideoAdsScreen()),
-                    );
-                  },
-                ),
-              ],
               _drawerItem(
                 icon: Icons.smart_toy,
                 label: 'Help & Support',

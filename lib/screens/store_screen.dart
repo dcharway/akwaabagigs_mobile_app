@@ -3,13 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../config/back4app_config.dart';
-import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
 import '../utils/constants.dart';
 import 'product_detail_screen.dart';
-import 'admin_post_product_screen.dart';
-import 'admin_manage_store_screen.dart';
 
 class StoreScreen extends StatefulWidget {
   const StoreScreen({super.key});
@@ -22,7 +19,6 @@ class _StoreScreenState extends State<StoreScreen> {
   List<Map<String, dynamic>> _products = [];
   bool _isLoading = true;
   String? _selectedCategory;
-  bool _isAdmin = false;
   LiveQuery? _liveQuery;
   Subscription? _productSubscription;
   final TextEditingController _searchController = TextEditingController();
@@ -34,7 +30,6 @@ class _StoreScreenState extends State<StoreScreen> {
   void initState() {
     super.initState();
     _loadProducts();
-    _checkAdmin();
     _subscribeLiveQuery();
   }
 
@@ -66,11 +61,6 @@ class _StoreScreenState extends State<StoreScreen> {
     } catch (_) {}
   }
 
-  Future<void> _checkAdmin() async {
-    final admin = await ApiService.isCurrentUserAdmin();
-    if (mounted) setState(() => _isAdmin = admin);
-  }
-
   Future<void> _loadProducts() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -90,31 +80,6 @@ class _StoreScreenState extends State<StoreScreen> {
         title: const Text('Akwaaba Store'),
         backgroundColor: AppColors.red600,
         foregroundColor: Colors.white,
-        actions: [
-          if (_isAdmin) ...[
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              tooltip: 'Post Item',
-              onPressed: () async {
-                final created = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const AdminPostProductScreen()),
-                );
-                if (created == true) _loadProducts();
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.settings),
-              tooltip: 'Manage Store',
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const AdminManageStoreScreen()),
-              ),
-            ),
-          ],
-        ],
       ),
       body: Column(
         children: [
