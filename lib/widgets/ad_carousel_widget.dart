@@ -6,7 +6,6 @@ import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/back4app_config.dart';
-import '../models/media_asset.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
 
@@ -20,7 +19,7 @@ class AdCarouselWidget extends StatefulWidget {
 class _AdCarouselWidgetState extends State<AdCarouselWidget>
     with WidgetsBindingObserver {
   int _currentIndex = 0;
-  List<MediaAsset> _assets = [];
+  List<Map<String, dynamic>> _ads = [];
   bool _isLoading = true;
   final Map<int, VideoPlayerController> _videoControllers = {};
   final Map<int, VoidCallback> _videoListeners = {};
@@ -40,8 +39,8 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadAssets();
-    _subscribeMediaAssets();
+    _loadAds();
+    _subscribeVideoAds();
   }
 
   @override
@@ -50,7 +49,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     _flushWatchTime();
     _watchTimer?.cancel();
     _reloadDebounce?.cancel();
-    _unsubscribeMediaAssets();
+    _unsubscribeVideoAds();
     for (final entry in _videoControllers.entries) {
       final listener = _videoListeners[entry.key];
       if (listener != null) entry.value.removeListener(listener);
@@ -65,26 +64,24 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
       _videoControllers[_currentIndex]?.pause();
       _flushWatchTime();
     } else if (state == AppLifecycleState.resumed) {
-      final asset =
-          _currentIndex < _assets.length ? _assets[_currentIndex] : null;
-      if (asset != null && asset.isVideo) {
+      if (_isVideo(_currentIndex)) {
         _videoControllers[_currentIndex]?.play();
         _startWatchTimer();
       }
     }
   }
 
-  Future<void> _loadAssets() async {
+  Future<void> _loadAds() async {
     try {
-      final raw = await ApiService.getActiveMediaAssets();
+      final raw = await ApiService.getActiveVideoAds();
       if (mounted) {
         setState(() {
-          _assets = raw.map((m) => MediaAsset.fromJson(m)).toList();
+          _ads = raw;
           _isLoading = false;
         });
-        if (_assets.isNotEmpty) {
+        if (_ads.isNotEmpty) {
           _trackImpression(0);
-          if (_assets[0].isVideo) _initVideo(0);
+          if (_isVideo(0)) _initVideo(0);
           _startWatchTimer();
         }
       }
@@ -93,15 +90,21 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     }
   }
 
+  bool _isVideo(int index) {
+    if (index >= _ads.length) return false;
+    final url = _ads[index]['videoUrl'] as String? ?? '';
+    return url.isNotEmpty;
+  }
+
   // ================================================================
-  //  LIVE SYNC — MediaAsset changes from the backend
+  //  LIVE SYNC — VideoAd changes from the backend
   // ================================================================
 
-  Future<void> _subscribeMediaAssets() async {
+  Future<void> _subscribeVideoAds() async {
     try {
       _liveQuery = LiveQuery();
       final query = QueryBuilder<ParseObject>(
-          ParseObject(Back4AppConfig.mediaAssetClass));
+          ParseObject(Back4AppConfig.videoAdClass));
       _mediaSubscription = await _liveQuery!.client.subscribe(query);
 
       void onEvent(_) => _debouncedReload();
@@ -111,7 +114,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     } catch (_) {}
   }
 
-  void _unsubscribeMediaAssets() {
+  void _unsubscribeVideoAds() {
     if (_liveQuery != null && _mediaSubscription != null) {
       _liveQuery!.client.unSubscribe(_mediaSubscription!);
     }
@@ -120,22 +123,20 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   void _debouncedReload() {
     _reloadDebounce?.cancel();
     _reloadDebounce = Timer(const Duration(milliseconds: 800), () {
-      if (mounted) _reloadAssets();
+      if (mounted) _reloadAds();
     });
   }
 
-  Future<void> _reloadAssets() async {
+  Future<void> _reloadAds() async {
     try {
-      final raw = await ApiService.getActiveMediaAssets();
+      final raw = await ApiService.getActiveVideoAds();
       if (!mounted) return;
-      final newAssets = raw.map((m) => MediaAsset.fromJson(m)).toList();
 
-      // Dispose controllers for assets that are no longer in the list
-      final newIds = newAssets.map((a) => a.id).toSet();
+      final newIds = raw.map((a) => a['id'] as String).toSet();
       final staleIndices = <int>[];
       for (final entry in _videoControllers.entries) {
-        if (entry.key >= _assets.length ||
-            !newIds.contains(_assets[entry.key].id)) {
+        if (entry.key >= _ads.length ||
+            !newIds.contains(_ads[entry.key]['id'])) {
           staleIndices.add(entry.key);
         }
       }
@@ -144,11 +145,11 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
       }
 
       setState(() {
-        _assets = newAssets;
+        _ads = raw;
         _currentIndex = 0;
       });
 
-      if (_assets.isNotEmpty && _assets[0].isVideo) {
+      if (_ads.isNotEmpty && _isVideo(0)) {
         _initVideo(0);
       }
     } catch (_) {}
@@ -160,9 +161,9 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
 
   Future<void> _initVideo(int index) async {
     if (_videoControllers.containsKey(index)) return;
-    if (index >= _assets.length || !_assets[index].isVideo) return;
+    if (index >= _ads.length || !_isVideo(index)) return;
 
-    final url = _assets[index].fileUrl;
+    final url = _ads[index]['videoUrl'] as String?;
     if (url == null || url.isEmpty) return;
 
     // Evict stale controllers that are far from the viewport to cap
@@ -215,13 +216,13 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     final pos = controller.value.position;
 
     if (pos.inMilliseconds >= dur.inMilliseconds - 200 &&
-        index < _assets.length) {
-      final id = _assets[index].id;
+        index < _ads.length) {
+      final id = _ads[index]['id'] as String;
       if (_completionTracked.add(id)) {
-        ApiService.trackMediaCompletion(id);
+        ApiService.trackAdCompletion(id);
       }
-      if (_assets.length > 1 && index == _currentIndex) {
-        final next = (index + 1) % _assets.length;
+      if (_ads.length > 1 && index == _currentIndex) {
+        final next = (index + 1) % _ads.length;
         _carouselController.animateToPage(next);
       }
     }
@@ -233,14 +234,13 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     _videoControllers[_currentIndex]?.seekTo(Duration.zero);
     setState(() => _currentIndex = index);
 
-    if (index < _assets.length) {
+    if (index < _ads.length) {
       _trackImpression(index);
-      final asset = _assets[index];
-      if (asset.isVideo) {
+      if (_isVideo(index)) {
         _initVideo(index);
         _videoControllers[index]?.play();
       }
-      if (index + 1 < _assets.length && _assets[index + 1].isVideo) {
+      if (index + 1 < _ads.length && _isVideo(index + 1)) {
         _initVideo(index + 1);
       }
       _startWatchTimer();
@@ -252,10 +252,10 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   // ================================================================
 
   void _trackImpression(int index) {
-    if (index >= _assets.length) return;
-    final id = _assets[index].id;
+    if (index >= _ads.length) return;
+    final id = _ads[index]['id'] as String;
     if (_impressionTracked.add(id)) {
-      ApiService.trackMediaImpression(id);
+      ApiService.trackAdImpression(id);
     }
   }
 
@@ -268,16 +268,16 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   }
 
   void _flushWatchTime() {
-    if (_watchSeconds > 0 && _currentIndex < _assets.length) {
-      ApiService.trackMediaWatchTime(
-          _assets[_currentIndex].id, _watchSeconds);
+    if (_watchSeconds > 0 && _currentIndex < _ads.length) {
+      ApiService.trackAdWatchTime(
+          _ads[_currentIndex]['id'] as String, _watchSeconds);
     }
     _watchSeconds = 0;
   }
 
-  void _handleCtaTap(MediaAsset asset) {
-    ApiService.trackMediaClick(asset.id);
-    final url = asset.ctaUrl;
+  void _handleCtaTap(Map<String, dynamic> ad) {
+    ApiService.trackAdClick(ad['id'] as String);
+    final url = ad['ctaUrl'] as String?;
     if (url != null && url.isNotEmpty) {
       launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     }
@@ -289,8 +289,8 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
 
   @override
   Widget build(BuildContext context) {
-    final hasAssets = _assets.isNotEmpty;
-    final itemCount = hasAssets ? _assets.length : _defaultCards.length;
+    final hasAds = _ads.isNotEmpty;
+    final itemCount = hasAds ? _ads.length : _defaultCards.length;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
@@ -326,22 +326,22 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
               options: CarouselOptions(
                 height: 320,
                 viewportFraction: 1.0,
-                autoPlay: hasAssets && !_assets.any((a) => a.isVideo),
+                autoPlay: hasAds && !_ads.any((a) => ((a['videoUrl'] as String?) ?? '').isNotEmpty),
                 autoPlayInterval: const Duration(seconds: 6),
                 enlargeCenterPage: false,
                 onPageChanged: (i, _) => _onPageChanged(i),
               ),
               items: List.generate(itemCount, (i) {
-                if (hasAssets) return _buildAssetCard(i);
+                if (hasAds) return _buildAdCard(i);
                 return _buildDefaultCard(_defaultCards[i]);
               }),
             ),
           const SizedBox(height: 10),
           // Ad position counter: "1 of 3"
-          if (hasAssets && _assets.length > 1)
+          if (hasAds && _ads.length > 1)
             Center(
               child: Text(
-                '${_currentIndex + 1} of ${_assets.length}',
+                '${_currentIndex + 1} of ${_ads.length}',
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.gray500,
@@ -358,19 +358,18 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   //  ASSET CARD
   // ================================================================
 
-  Widget _buildAssetCard(int index) {
-    final asset = _assets[index];
-    return asset.isVideo
-        ? _buildVideoCard(index, asset)
-        : _buildImageCard(asset);
+  Widget _buildAdCard(int index) {
+    final ad = _ads[index];
+    return _isVideo(index) ? _buildVideoCard(index, ad) : _buildImageCard(ad);
   }
 
-  Widget _buildImageCard(MediaAsset asset) {
+  Widget _buildImageCard(Map<String, dynamic> ad) {
+    final url = ad['thumbnailUrl'] as String? ?? '';
     return _cardShell(
-      asset: asset,
-      background: asset.fileUrl != null && asset.fileUrl!.isNotEmpty
+      ad: ad,
+      background: url.isNotEmpty
           ? CachedNetworkImage(
-              imageUrl: asset.fileUrl!,
+              imageUrl: url,
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
@@ -381,7 +380,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     );
   }
 
-  Widget _buildVideoCard(int index, MediaAsset asset) {
+  Widget _buildVideoCard(int index, Map<String, dynamic> ad) {
     final controller = _videoControllers[index];
     final isInit = controller?.value.isInitialized ?? false;
     final isPlaying = controller?.value.isPlaying ?? false;
@@ -402,10 +401,9 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
           ),
         ),
       );
-    } else if (asset.thumbnailUrl != null &&
-        asset.thumbnailUrl!.isNotEmpty) {
+    } else if ((ad['thumbnailUrl'] as String? ?? '').isNotEmpty) {
       background = CachedNetworkImage(
-        imageUrl: asset.thumbnailUrl!,
+        imageUrl: ad['thumbnailUrl'] as String,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
@@ -417,7 +415,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     }
 
     return _cardShell(
-      asset: asset,
+      ad: ad,
       background: background,
       showPlayButton: !isPlaying,
       videoController: controller,
@@ -430,7 +428,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   // ================================================================
 
   Widget _cardShell({
-    required MediaAsset asset,
+    required Map<String, dynamic> ad,
     required Widget background,
     bool showPlayButton = false,
     VideoPlayerController? videoController,
@@ -504,7 +502,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
               right: 10,
               child: Row(
                 children: [
-                  if (asset.isSponsored)
+                  if ((ad['advertiserName'] as String? ?? '').isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
@@ -519,7 +517,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
                               color: AppColors.amber500, size: 12),
                           const SizedBox(width: 4),
                           Text(
-                            'Sponsored${asset.advertiserName != null ? ' • ${asset.advertiserName}' : ''}',
+                            'Sponsored • ${ad['advertiserName']}',
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -586,56 +584,60 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
               bottom: 14,
               left: 14,
               right: 14,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (asset.title.isNotEmpty)
-                    Text(
-                      asset.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  if (asset.description != null &&
-                      asset.description!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      asset.description!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                    ),
-                  ],
-                  if (asset.hasCta) ...[
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 34,
-                      child: FilledButton.icon(
-                        onPressed: () => _handleCtaTap(asset),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.amber600,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14),
-                          textStyle: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600),
+              child: Builder(builder: (_) {
+                final title = ad['title'] as String? ?? '';
+                final desc = ad['description'] as String? ?? '';
+                final ctaLabel = ad['ctaLabel'] as String? ?? '';
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (title.isNotEmpty)
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
                         ),
-                        icon: const Icon(Icons.arrow_forward,
-                            size: 16),
-                        label: Text(asset.ctaLabel!),
                       ),
-                    ),
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        desc,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                    ],
+                    if (ctaLabel.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 34,
+                        child: FilledButton.icon(
+                          onPressed: () => _handleCtaTap(ad),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.amber600,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14),
+                            textStyle: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          icon: const Icon(Icons.arrow_forward,
+                              size: 16),
+                          label: Text(ctaLabel),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                );
+              }),
             ),
 
             // Video progress bar
