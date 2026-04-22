@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
+import '../config/back4app_config.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/app_notifier.dart';
@@ -24,14 +26,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
 
+  LiveQuery? _liveQuery;
+  Subscription? _productSubscription;
+
   @override
   void initState() {
     super.initState();
     _loadProduct();
+    _subscribeProduct();
   }
 
   @override
   void dispose() {
+    _unsubscribeProduct();
     _phoneController.dispose();
     _addressController.dispose();
     super.dispose();
@@ -42,6 +49,39 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       _product = await ApiService.getProduct(widget.productId);
     } catch (_) {}
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _subscribeProduct() async {
+    try {
+      _liveQuery = LiveQuery();
+      final query = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.productClass))
+        ..whereEqualTo('objectId', widget.productId);
+      _productSubscription = await _liveQuery!.client.subscribe(query);
+
+      _productSubscription!.on(LiveQueryEvent.update, (_) {
+        if (mounted) _refreshProduct();
+      });
+    } catch (_) {}
+  }
+
+  void _unsubscribeProduct() {
+    if (_liveQuery != null && _productSubscription != null) {
+      _liveQuery!.client.unSubscribe(_productSubscription!);
+    }
+  }
+
+  Future<void> _refreshProduct() async {
+    try {
+      final updated = await ApiService.getProduct(widget.productId);
+      if (updated != null && mounted) {
+        setState(() {
+          _product = updated;
+          final stock = updated['stock'] as int;
+          if (_quantity > stock) _quantity = stock.clamp(1, stock);
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _purchase() async {

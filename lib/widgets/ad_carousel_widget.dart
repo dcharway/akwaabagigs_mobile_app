@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../config/back4app_config.dart';
 import '../models/media_asset.dart';
 import '../services/api_service.dart';
 import '../utils/colors.dart';
@@ -30,11 +32,16 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   int _watchSeconds = 0;
   static const _maxConcurrentVideos = 3;
 
+  LiveQuery? _liveQuery;
+  Subscription? _mediaSubscription;
+  Timer? _reloadDebounce;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadAssets();
+    _subscribeMediaAssets();
   }
 
   @override
@@ -42,6 +49,8 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     WidgetsBinding.instance.removeObserver(this);
     _flushWatchTime();
     _watchTimer?.cancel();
+    _reloadDebounce?.cancel();
+    _unsubscribeMediaAssets();
     for (final entry in _videoControllers.entries) {
       final listener = _videoListeners[entry.key];
       if (listener != null) entry.value.removeListener(listener);
@@ -82,6 +91,67 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // ================================================================
+  //  LIVE SYNC — MediaAsset changes from the backend
+  // ================================================================
+
+  Future<void> _subscribeMediaAssets() async {
+    try {
+      _liveQuery = LiveQuery();
+      final query = QueryBuilder<ParseObject>(
+          ParseObject(Back4AppConfig.mediaAssetClass));
+      _mediaSubscription = await _liveQuery!.client.subscribe(query);
+
+      void onEvent(_) => _debouncedReload();
+      _mediaSubscription!.on(LiveQueryEvent.create, onEvent);
+      _mediaSubscription!.on(LiveQueryEvent.update, onEvent);
+      _mediaSubscription!.on(LiveQueryEvent.delete, onEvent);
+    } catch (_) {}
+  }
+
+  void _unsubscribeMediaAssets() {
+    if (_liveQuery != null && _mediaSubscription != null) {
+      _liveQuery!.client.unSubscribe(_mediaSubscription!);
+    }
+  }
+
+  void _debouncedReload() {
+    _reloadDebounce?.cancel();
+    _reloadDebounce = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) _reloadAssets();
+    });
+  }
+
+  Future<void> _reloadAssets() async {
+    try {
+      final raw = await ApiService.getActiveMediaAssets();
+      if (!mounted) return;
+      final newAssets = raw.map((m) => MediaAsset.fromJson(m)).toList();
+
+      // Dispose controllers for assets that are no longer in the list
+      final newIds = newAssets.map((a) => a.id).toSet();
+      final staleIndices = <int>[];
+      for (final entry in _videoControllers.entries) {
+        if (entry.key >= _assets.length ||
+            !newIds.contains(_assets[entry.key].id)) {
+          staleIndices.add(entry.key);
+        }
+      }
+      for (final i in staleIndices) {
+        _disposeController(i);
+      }
+
+      setState(() {
+        _assets = newAssets;
+        _currentIndex = 0;
+      });
+
+      if (_assets.isNotEmpty && _assets[0].isVideo) {
+        _initVideo(0);
+      }
+    } catch (_) {}
   }
 
   // ================================================================
