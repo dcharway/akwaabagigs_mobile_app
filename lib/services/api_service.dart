@@ -1499,8 +1499,9 @@ class ApiService {
           (endStr != null && endStr.isNotEmpty) ? DateTime.tryParse(endStr) : null;
       final inWindow = (start == null || !now.isBefore(start)) &&
           (end == null || !now.isAfter(end));
-      debugPrint('[VideoAd]   schedule check: inWindow=$inWindow');
-      if (inWindow) {
+      final hasVideo = (map['videoUrl'] as String? ?? '').isNotEmpty;
+      debugPrint('[VideoAd]   schedule=$inWindow hasVideo=$hasVideo');
+      if (inWindow && hasVideo) {
         results.add(map);
       }
     }
