@@ -26,6 +26,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   final Set<String> _impressionTracked = {};
   final Set<String> _completionTracked = {};
   final Set<int> _failedIndices = {};
+  final Map<int, bool> _wasPlaying = {};
   final CarouselSliderController _carouselController =
       CarouselSliderController();
   Timer? _watchTimer;
@@ -75,6 +76,13 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   Future<void> _loadAds() async {
     try {
       final raw = await ApiService.getActiveVideoAds();
+      debugPrint('[Carousel] received ${raw.length} ads from API');
+      for (var i = 0; i < raw.length; i++) {
+        final a = raw[i];
+        debugPrint('[Carousel] ad[$i]: title=${a['title']} '
+            'videoUrl=${((a['videoUrl'] as String?) ?? '').length} chars '
+            'thumb=${a['thumbnailUrl'] != null ? 'YES' : 'NO'}');
+      }
       if (mounted) {
         setState(() {
           _ads = raw;
@@ -82,11 +90,19 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
         });
         if (_ads.isNotEmpty) {
           _trackImpression(0);
-          if (_isVideo(0)) _initVideo(0);
+          if (_isVideo(0)) {
+            debugPrint('[Carousel] first ad is video — initializing');
+            _initVideo(0);
+          } else {
+            debugPrint('[Carousel] first ad is NOT video (empty videoUrl)');
+          }
           _startWatchTimer();
+        } else {
+          debugPrint('[Carousel] no ads — showing fallback cards');
         }
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Carousel] _loadAds error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -162,23 +178,37 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   // ================================================================
 
   Future<void> _initVideo(int index) async {
-    if (_videoControllers.containsKey(index)) return;
+    if (_videoControllers.containsKey(index)) {
+      debugPrint('[Video] ad $index already has controller — skipping');
+      return;
+    }
     if (index >= _ads.length || !_isVideo(index)) return;
-    if (_failedIndices.contains(index)) return;
+    if (_failedIndices.contains(index)) {
+      debugPrint('[Video] ad $index previously failed — skipping');
+      return;
+    }
 
     final url = _ads[index]['videoUrl'] as String?;
-    if (url == null || url.isEmpty) return;
+    if (url == null || url.isEmpty) {
+      debugPrint('[Video] ad $index has empty videoUrl');
+      return;
+    }
 
+    debugPrint('[Video] ad $index: attempting init with URL: $url');
     _evictStaleControllers(index);
 
     try {
       final uri = Uri.parse(url);
+      debugPrint('[Video] ad $index: parsed URI scheme=${uri.scheme} host=${uri.host}');
+
       if (!uri.hasScheme || (!uri.isScheme('http') && !uri.isScheme('https'))) {
-        debugPrint('[Video] Invalid URL scheme for ad $index: $url');
+        debugPrint('[Video] ad $index: REJECTED — invalid scheme "${uri.scheme}"');
         _failedIndices.add(index);
+        if (mounted) setState(() {});
         return;
       }
 
+      debugPrint('[Video] ad $index: creating controller...');
       final controller = VideoPlayerController.networkUrl(
         uri,
         httpHeaders: {
@@ -188,16 +218,21 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
       );
       _videoControllers[index] = controller;
 
+      debugPrint('[Video] ad $index: calling initialize()...');
       await controller.initialize();
 
       if (controller.value.hasError) {
-        debugPrint(
-            '[Video] Init error for ad $index: ${controller.value.errorDescription}');
+        debugPrint('[Video] ad $index: ERROR after init: '
+            '${controller.value.errorDescription}');
         _failedIndices.add(index);
         _disposeController(index);
         if (mounted) setState(() {});
         return;
       }
+
+      debugPrint('[Video] ad $index: initialized OK — '
+          'size=${controller.value.size} '
+          'duration=${controller.value.duration}');
 
       controller.setLooping(false);
       controller.setVolume(0);
@@ -207,11 +242,13 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
       controller.addListener(listener);
 
       if (index == _currentIndex && mounted) {
+        debugPrint('[Video] ad $index: starting playback');
         controller.play();
         if (mounted) setState(() {});
       }
-    } catch (e) {
-      debugPrint('[Video] Failed to load ad $index ($url): $e');
+    } catch (e, st) {
+      debugPrint('[Video] ad $index: EXCEPTION: $e');
+      debugPrint('[Video] ad $index: stacktrace: $st');
       _failedIndices.add(index);
       _disposeController(index);
       if (mounted) setState(() {});
@@ -240,6 +277,17 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
 
   void _onVideoTick(VideoPlayerController controller, int index) {
     if (!mounted) return;
+
+    // Rebuild once when isPlaying toggles (play start / pause / end).
+    // This removes the play-button overlay when playback begins and
+    // restores it when the video pauses or finishes — without the
+    // 30fps rebuild cost of calling setState on every frame.
+    final nowPlaying = controller.value.isPlaying;
+    if (nowPlaying != (_wasPlaying[index] ?? false)) {
+      _wasPlaying[index] = nowPlaying;
+      setState(() {});
+    }
+
     final dur = controller.value.duration;
     if (dur.inMilliseconds <= 0) return;
     final pos = controller.value.position;

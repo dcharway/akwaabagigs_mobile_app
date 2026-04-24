@@ -1474,23 +1474,37 @@ class ApiService {
       ..setLimit(20);
 
     final response = await query.query();
-    if (!response.success || response.results == null) return [];
+    debugPrint('[VideoAd] query success=${response.success} '
+        'count=${response.results?.length ?? 0}');
+
+    if (!response.success || response.results == null) {
+      debugPrint('[VideoAd] query error: ${response.error?.message}');
+      return [];
+    }
 
     final now = DateTime.now();
     final results = <Map<String, dynamic>>[];
     for (final e in response.results!) {
       final map = _parseObjectToVideoAdMap(e as ParseObject);
+      debugPrint('[VideoAd] raw: id=${map['id']} '
+          'videoUrl=${(map['videoUrl'] as String).isNotEmpty ? 'YES(${(map['videoUrl'] as String).substring(0, (map['videoUrl'] as String).length.clamp(0, 60))})' : 'EMPTY'} '
+          'status=${map['status']} '
+          'schedule=${map['scheduleStart']}..${map['scheduleEnd']}');
+
       final startStr = map['scheduleStart'] as String?;
       final endStr = map['scheduleEnd'] as String?;
       final start =
           (startStr != null && startStr.isNotEmpty) ? DateTime.tryParse(startStr) : null;
       final end =
           (endStr != null && endStr.isNotEmpty) ? DateTime.tryParse(endStr) : null;
-      if ((start == null || !now.isBefore(start)) &&
-          (end == null || !now.isAfter(end))) {
+      final inWindow = (start == null || !now.isBefore(start)) &&
+          (end == null || !now.isAfter(end));
+      debugPrint('[VideoAd]   schedule check: inWindow=$inWindow');
+      if (inWindow) {
         results.add(map);
       }
     }
+    debugPrint('[VideoAd] returning ${results.length} ads after filtering');
     return results;
   }
 
