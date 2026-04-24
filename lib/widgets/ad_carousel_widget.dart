@@ -469,50 +469,66 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
       background = _buildVideoError(
           controller?.value.errorDescription ?? 'Video unavailable');
     } else if (isInit) {
+      // Use fallback dimensions when controller.value.size is zero
+      // (common on Samsung devices before first frame decodes).
+      final w = controller!.value.size.width;
+      final h = controller.value.size.height;
       background = GestureDetector(
         onTap: () {
-          isPlaying ? controller!.pause() : controller!.play();
-          setState(() {});
+          isPlaying ? controller.pause() : controller.play();
+          if (mounted) setState(() {});
         },
-        child: FittedBox(
-          fit: BoxFit.cover,
-          child: SizedBox(
-            width: controller!.value.size.width,
-            height: controller.value.size.height,
-            child: VideoPlayer(controller),
+        child: SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: w > 0 ? w : 720,
+              height: h > 0 ? h : 1280,
+              child: VideoPlayer(controller),
+            ),
           ),
         ),
       );
-    } else if ((ad['thumbnailUrl'] as String? ?? '').isNotEmpty) {
+    } else {
+      // Loading state — show thumbnail with spinner, or plain spinner
+      final thumb = ad['thumbnailUrl'] as String? ?? '';
       background = Stack(
         fit: StackFit.expand,
         children: [
-          CachedNetworkImage(
-            imageUrl: ad['thumbnailUrl'] as String,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            placeholder: (_, __) => _fallbackBg(),
-            errorWidget: (_, __, ___) => _fallbackBg(),
-          ),
-          const Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white),
+          if (thumb.isNotEmpty)
+            CachedNetworkImage(
+              imageUrl: thumb,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              placeholder: (_, __) => _fallbackBg(),
+              errorWidget: (_, __, ___) => _fallbackBg(),
+            )
+          else
+            _fallbackBg(),
+          Center(
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              ),
             ),
           ),
         ],
       );
-    } else {
-      background = _fallbackBg();
     }
 
     return _cardShell(
       ad: ad,
       background: background,
-      showPlayButton: !isPlaying,
+      showPlayButton: isInit && !isPlaying,
       videoController: controller,
       isVideoInit: isInit,
     );
