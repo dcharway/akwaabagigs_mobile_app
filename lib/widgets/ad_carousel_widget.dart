@@ -25,6 +25,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   final Map<int, VoidCallback> _videoListeners = {};
   final Set<String> _impressionTracked = {};
   final Set<String> _completionTracked = {};
+  final Set<int> _failedIndices = {};
   final CarouselSliderController _carouselController =
       CarouselSliderController();
   Timer? _watchTimer;
@@ -132,6 +133,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
       final raw = await ApiService.getActiveVideoAds();
       if (!mounted) return;
 
+      _failedIndices.clear();
       final newIds = raw.map((a) => a['id'] as String).toSet();
       final staleIndices = <int>[];
       for (final entry in _videoControllers.entries) {
@@ -162,19 +164,41 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   Future<void> _initVideo(int index) async {
     if (_videoControllers.containsKey(index)) return;
     if (index >= _ads.length || !_isVideo(index)) return;
+    if (_failedIndices.contains(index)) return;
 
     final url = _ads[index]['videoUrl'] as String?;
     if (url == null || url.isEmpty) return;
 
-    // Evict stale controllers that are far from the viewport to cap
-    // memory at _maxConcurrentVideos active decoders.
     _evictStaleControllers(index);
 
     try {
-      final controller =
-          VideoPlayerController.networkUrl(Uri.parse(url));
+      final uri = Uri.parse(url);
+      if (!uri.hasScheme || (!uri.isScheme('http') && !uri.isScheme('https'))) {
+        debugPrint('[Video] Invalid URL scheme for ad $index: $url');
+        _failedIndices.add(index);
+        return;
+      }
+
+      final controller = VideoPlayerController.networkUrl(
+        uri,
+        httpHeaders: {
+          'X-Parse-Application-Id': Back4AppConfig.applicationId,
+          'X-Parse-Client-Key': Back4AppConfig.clientKey,
+        },
+      );
       _videoControllers[index] = controller;
+
       await controller.initialize();
+
+      if (controller.value.hasError) {
+        debugPrint(
+            '[Video] Init error for ad $index: ${controller.value.errorDescription}');
+        _failedIndices.add(index);
+        _disposeController(index);
+        if (mounted) setState(() {});
+        return;
+      }
+
       controller.setLooping(false);
       controller.setVolume(0);
 
@@ -186,7 +210,12 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
         controller.play();
         if (mounted) setState(() {});
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Video] Failed to load ad $index ($url): $e');
+      _failedIndices.add(index);
+      _disposeController(index);
+      if (mounted) setState(() {});
+    }
   }
 
   void _evictStaleControllers(int keepNear) {
@@ -384,9 +413,14 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
     final controller = _videoControllers[index];
     final isInit = controller?.value.isInitialized ?? false;
     final isPlaying = controller?.value.isPlaying ?? false;
+    final hasFailed = _failedIndices.contains(index);
+    final hasError = controller?.value.hasError ?? false;
 
     Widget background;
-    if (isInit) {
+    if (hasFailed || hasError) {
+      background = _buildVideoError(
+          controller?.value.errorDescription ?? 'Video unavailable');
+    } else if (isInit) {
       background = GestureDetector(
         onTap: () {
           isPlaying ? controller!.pause() : controller!.play();
@@ -402,13 +436,26 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
         ),
       );
     } else if ((ad['thumbnailUrl'] as String? ?? '').isNotEmpty) {
-      background = CachedNetworkImage(
-        imageUrl: ad['thumbnailUrl'] as String,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        placeholder: (_, __) => _fallbackBg(),
-        errorWidget: (_, __, ___) => _fallbackBg(),
+      background = Stack(
+        fit: StackFit.expand,
+        children: [
+          CachedNetworkImage(
+            imageUrl: ad['thumbnailUrl'] as String,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+            placeholder: (_, __) => _fallbackBg(),
+            errorWidget: (_, __, ___) => _fallbackBg(),
+          ),
+          const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white),
+            ),
+          ),
+        ],
       );
     } else {
       background = _fallbackBg();
@@ -690,6 +737,30 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
       'icon': 'search',
     },
   ];
+
+  Widget _buildVideoError(String message) {
+    return Container(
+      color: AppColors.gray100,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.videocam_off, size: 36, color: AppColors.gray400),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.gray500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _fallbackBg() {
     return Container(
