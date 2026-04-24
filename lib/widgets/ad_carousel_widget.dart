@@ -26,6 +26,7 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
   final Set<String> _impressionTracked = {};
   final Set<String> _completionTracked = {};
   final Set<int> _failedIndices = {};
+  final Map<int, bool> _wasPlaying = {};
   final CarouselSliderController _carouselController =
       CarouselSliderController();
   Timer? _watchTimer;
@@ -276,6 +277,17 @@ class _AdCarouselWidgetState extends State<AdCarouselWidget>
 
   void _onVideoTick(VideoPlayerController controller, int index) {
     if (!mounted) return;
+
+    // Rebuild once when isPlaying toggles (play start / pause / end).
+    // This removes the play-button overlay when playback begins and
+    // restores it when the video pauses or finishes — without the
+    // 30fps rebuild cost of calling setState on every frame.
+    final nowPlaying = controller.value.isPlaying;
+    if (nowPlaying != (_wasPlaying[index] ?? false)) {
+      _wasPlaying[index] = nowPlaying;
+      setState(() {});
+    }
+
     final dur = controller.value.duration;
     if (dur.inMilliseconds <= 0) return;
     final pos = controller.value.position;
