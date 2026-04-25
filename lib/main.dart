@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import 'package:provider/provider.dart';
 import 'config/back4app_config.dart';
@@ -14,6 +13,7 @@ import 'utils/colors.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Set status bar style
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -21,10 +21,7 @@ Future<void> main() async {
     ),
   );
 
-  // Initialize Firebase (phone auth)
-  await Firebase.initializeApp();
-
-  // Initialize Back4App Parse SDK (data backend)
+  // Initialize Back4App Parse SDK
   await Parse().initialize(
     Back4AppConfig.applicationId,
     Back4AppConfig.serverUrl,

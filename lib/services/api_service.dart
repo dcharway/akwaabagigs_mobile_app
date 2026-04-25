@@ -131,84 +131,6 @@ class ApiService {
     };
   }
 
-  // ============ FIREBASE PHONE AUTH → PARSE SYNC ============
-
-  /// Find an existing Parse user by phone number, or create one.
-  /// Returns {user: Map, isNew: bool}.
-  static Future<Map<String, dynamic>> findOrCreateUserByPhone({
-    required String phone,
-    required String firebaseUid,
-  }) async {
-    // Look for existing user with this phone
-    final query = QueryBuilder<ParseUser>(ParseUser.forQuery())
-      ..whereEqualTo('phone', phone);
-    final findResponse = await query.query();
-
-    if (findResponse.success &&
-        findResponse.results != null &&
-        findResponse.results!.isNotEmpty) {
-      final existing = findResponse.results!.first as ParseUser;
-      // Update firebaseUid if missing
-      if (existing.get<String>('firebaseUid') == null) {
-        existing.set('firebaseUid', firebaseUid);
-        existing.set('phoneVerified', true);
-        await existing.save();
-      }
-      // Log them in by creating a session
-      final loginResponse = await existing.login();
-      if (loginResponse.success) {
-        return {
-          'user': _parseUserToMap(loginResponse.result as ParseUser),
-          'isNew': false,
-        };
-      }
-      // If login fails (no password), return as existing anyway
-      return {
-        'user': _parseUserToMap(existing),
-        'isNew': false,
-      };
-    }
-
-    // No existing user — create a new one
-    final username = 'phone_${phone.replaceAll('+', '')}';
-    final password = 'fb_${firebaseUid}_${DateTime.now().millisecondsSinceEpoch}';
-    final newUser = ParseUser.createUser(username, password, null)
-      ..set('phone', phone)
-      ..set('firebaseUid', firebaseUid)
-      ..set('phoneVerified', true);
-
-    final signUpResponse = await newUser.signUp();
-    if (signUpResponse.success && signUpResponse.result != null) {
-      return {
-        'user': _parseUserToMap(signUpResponse.result as ParseUser),
-        'isNew': true,
-      };
-    }
-    throw Exception(
-        signUpResponse.error?.message ?? 'Failed to create account');
-  }
-
-  /// Update the current Parse user's profile (name, role).
-  static Future<User> updateCurrentUserProfile({
-    String? firstName,
-    String? lastName,
-    String? role,
-  }) async {
-    final user = await ParseUser.currentUser() as ParseUser?;
-    if (user == null) throw Exception('Not authenticated');
-
-    if (firstName != null) user.set('firstName', firstName);
-    if (lastName != null) user.set('lastName', lastName);
-    if (role != null) user.set('role', role);
-
-    final response = await user.save();
-    if (!response.success) {
-      throw Exception(
-          response.error?.message ?? 'Failed to update profile');
-    }
-    return User.fromJson(_parseUserToMap(user));
-  }
-
   // ============ JOBS ============
 
   static Future<List<Job>> getJobs() async {
@@ -2371,12 +2293,8 @@ class ApiService {
       'email': user.emailAddress ?? '',
       'firstName': user.get<String>('firstName') ?? '',
       'lastName': user.get<String>('lastName') ?? '',
-      'phone': user.get<String>('phone'),
-      'firebaseUid': user.get<String>('firebaseUid'),
-      'role': user.get<String>('role'),
       'profileImageUrl': user.get<String>('profileImageUrl'),
       'isAdmin': user.get<bool>('isAdmin') ?? false,
-      'phoneVerified': user.get<bool>('phoneVerified') ?? false,
       'createdAt': user.createdAt?.toIso8601String(),
       'updatedAt': user.updatedAt?.toIso8601String(),
     };
