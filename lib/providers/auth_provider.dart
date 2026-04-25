@@ -36,57 +36,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Firebase phone auth → find or create Parse user.
-  /// Returns true if the user is new (needs role selection).
-  Future<bool> loginWithPhone({
-    required String phone,
-    required String firebaseUid,
-  }) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final result = await ApiService.findOrCreateUserByPhone(
-        phone: phone,
-        firebaseUid: firebaseUid,
-      );
-
-      _user = User.fromJson(result['user'] as Map<String, dynamic>);
-      _isAuthenticated = true;
-      _isLoading = false;
-      notifyListeners();
-
-      return result['isNew'] as bool;
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  /// Set name and role after phone verification (new users only).
-  Future<void> completeProfile({
-    required String firstName,
-    required String lastName,
-    required String role,
-  }) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      _user = await ApiService.updateCurrentUserProfile(
-        firstName: firstName,
-        lastName: lastName,
-        role: role,
-      );
-      _isAuthenticated = true;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  /// Legacy email/password login (kept for backward compatibility).
   Future<void> login({
     required String email,
     required String password,
@@ -108,7 +57,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Legacy registration (kept for backward compatibility).
   Future<void> register({
     required String firstName,
     required String lastName,
