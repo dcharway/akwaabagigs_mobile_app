@@ -1,122 +1,88 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
-import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
-import '../providers/support_chat_provider.dart';
 import '../utils/colors.dart';
 
-/// AI-powered customer support chatbot using Flutter AI Toolkit.
-///
-/// This is the ONLY screen that uses flutter_ai_toolkit. All person-to-person
-/// chat between gig seekers and gig posters uses the Back4App LiveQuery-based
-/// LiveChatScreen instead.
-class CustomerSupportScreen extends StatefulWidget {
+class CustomerSupportScreen extends StatelessWidget {
   const CustomerSupportScreen({super.key});
 
-  @override
-  State<CustomerSupportScreen> createState() => _CustomerSupportScreenState();
-}
-
-class _CustomerSupportScreenState extends State<CustomerSupportScreen> {
-  late SupportChatProvider _provider;
-
-  @override
-  void initState() {
-    super.initState();
-    final auth = context.read<AuthProvider>();
-    _provider = SupportChatProvider(
-      userId: auth.user?.id,
-      userEmail: auth.user?.email,
-    );
-  }
-
-  @override
-  void dispose() {
-    _provider.dispose();
-    super.dispose();
-  }
+  static const _faqs = [
+    {
+      'q': 'How do I post a gig?',
+      'a': 'Go to the Gigs tab and tap "Post Gig". Fill in the details, '
+          'upload images, and complete payment to publish.',
+    },
+    {
+      'q': 'How do I apply for a gig?',
+      'a': 'Browse gigs, tap one you like, and tap "Apply". You\'ll need to '
+          'place a bid — chat unlocks when the poster accepts.',
+    },
+    {
+      'q': 'How does bidding work?',
+      'a': 'After applying, submit a bid in GH₵. The poster reviews bids '
+          'and accepts one. Chat is enabled once a bid is agreed.',
+    },
+    {
+      'q': 'How do I get verified?',
+      'a': 'Go to Profile → Verify Identity. Select your document type '
+          '(Ghana Card, Voter\'s ID, etc.) and complete the scan.',
+    },
+    {
+      'q': 'How does payment work?',
+      'a': 'Payments are processed via Mobile Money (MoMo). Escrow holds '
+          'funds securely until the gig is completed.',
+    },
+    {
+      'q': 'How do I contact the poster/seeker?',
+      'a': 'Once a bid is accepted, the Chat tab unlocks for direct '
+          'messaging between both parties.',
+    },
+    {
+      'q': 'How do I buy from the Store?',
+      'a': 'Go to the Store tab, browse products, tap one, select quantity, '
+          'enter your MoMo number, and tap Buy.',
+    },
+    {
+      'q': 'I have another question',
+      'a': 'Email us at support@akwaabagigs.com or call +233 XX XXX XXXX '
+          'during business hours (Mon-Fri 8am-5pm GMT).',
+    },
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Customer Support'),
-            Text(
-              'AI-powered help — available 24/7',
-              style: TextStyle(fontSize: 11, color: Colors.white70),
-            ),
-          ],
-        ),
+        title: const Text('Help & Support'),
         backgroundColor: AppColors.amber600,
         foregroundColor: Colors.white,
-        actions: [
-          // AI badge
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _faqs.length,
+        itemBuilder: (context, index) {
+          final faq = _faqs[index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ExpansionTile(
+              leading: Icon(Icons.help_outline,
+                  color: AppColors.amber600, size: 22),
+              title: Text(
+                faq['q']!,
+                style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               children: [
-                Icon(Icons.smart_toy, size: 14, color: Colors.white),
-                SizedBox(width: 4),
-                Text('AI',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Text(
+                    faq['a']!,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.gray600),
+                  ),
+                ),
               ],
             ),
-          ),
-        ],
-      ),
-      body: LlmChatView(
-        provider: _provider,
-        welcomeMessage:
-            'Hello! 👋 I\'m the Akwaaba Gigs support assistant.\n\n'
-            'I can help you with posting gigs, applying, payments, '
-            'verification, escrow, and more.\n\n'
-            'What do you need help with?',
-        style: LlmChatViewStyle(
-          backgroundColor: Colors.white,
-          submitButtonStyle: ActionButtonStyle(
-            icon: Icons.send,
-            iconColor: Colors.white,
-            iconDecoration: const BoxDecoration(
-              color: AppColors.amber600,
-              shape: BoxShape.circle,
-            ),
-          ),
-          userMessageStyle: UserMessageStyle(
-            decoration: BoxDecoration(
-              color: AppColors.amber600,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: const Radius.circular(16),
-                bottomRight: const Radius.circular(4),
-              ),
-            ),
-            textStyle: const TextStyle(color: Colors.white, fontSize: 15),
-          ),
-          llmMessageStyle: LlmMessageStyle(
-            decoration: BoxDecoration(
-              color: AppColors.gray100,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: const Radius.circular(4),
-                bottomRight: const Radius.circular(16),
-              ),
-            ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
